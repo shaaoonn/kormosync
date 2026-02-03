@@ -1,0 +1,37 @@
+"use client";
+
+import { Hind_Siliguri } from "next/font/google";
+import "./globals.css";
+import { AuthProvider } from "@/context/AuthContext";
+
+const hindSiliguri = Hind_Siliguri({
+  weight: ["300", "400", "500", "600", "700"],
+  subsets: ["bengali", "latin"],
+  variable: "--font-hind-siliguri",
+  display: "swap",
+});
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="bn" suppressHydrationWarning>
+      <head>
+        <title>KormoSync - কর্ম ট্র্যাকার</title>
+        <meta name="description" content="KormoSync - বাংলায় কর্ম ট্র্যাকার" />
+      </head>
+      <body
+        className={`${hindSiliguri.variable} antialiased`}
+        style={{ fontFamily: "'Hind Siliguri', sans-serif" }}
+        suppressHydrationWarning
+      >
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
+    </html>
+  );
+}
+

@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #D4AF37;
+  /* Gold */
+  --color-primary-hover: #C5A028;
+  --color-danger: #8B0000;
+  --color-danger-hover: #660000;
+
+  /* Slate Colors Extended for v4 if needed, usually built-in but verifying */
+}
+
+:root {
+  --background: #020617;
+  /* Slate 950 */
+  --foreground: #f8fafc;
+  /* Slate 50 */
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

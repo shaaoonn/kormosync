@@ -1,0 +1,392 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --------------------------------------
+// Enums
+// --------------------------------------
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  PAST_DUE
+}
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  ADMIN
+  EMPLOYEE
+  FREELANCER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+
+enum NotificationType {
+  INFO
+  WARNING
+  ERROR
+}
+
+enum BillingType {
+  FIXED_PRICE
+  HOURLY
+  SCHEDULED
+}
+
+enum ScheduleType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum TaskPublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum SubTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+// --------------------------------------
+// Models
+// --------------------------------------
+
+model Company {
+  id                  String             @id @default(uuid())
+  name                String
+  companySize         String?            // e.g. "1-10", "11-50"
+  subscriptionStatus  SubscriptionStatus @default(ACTIVE)
+  isStarred           Boolean            @default(false)
+  maxEmployees        Int                @default(10)      // Default 10 for free trial? Or 10 for Startup
+  subscriptionEndDate DateTime?
+  aiCredits           Int                @default(50)
+  bkashAgreementId    String? 
+
+  // Storage
+  storageUsed         Float              @default(0.0) // In MB
+  storageLimit        Float              @default(2048.0) // 2GB Default
+
+  // Trial Logic
+  trialEmployeeEndDate DateTime?         // Free plan: employee access expires after this date
+  hasClaimedTrial      Boolean           @default(false)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? 
+
+  // Relations
+  users    User[]
+  tasks    Task[]
+  payments Payment[]
+  invites  Invite[]
+  clientTasks Task[] @relation("ClientTasks")
+
+  @@index([subscriptionStatus])
+}
+
+model User {
+  id          String  @id @default(uuid())
+  companyId   String?
+  firebaseUid String  @unique 
+  role        Role    @default(EMPLOYEE)
+  isPublic    Boolean @default(false)
+  email       String? @unique
+  name        String?
+  designation String? 
+  phoneNumber String?
+  profileImage String?
+
+  // CV / Profile Fields
+  bio           String?   // Short bio/summary
+  dateOfBirth   DateTime?
+  address       String?
+  city          String?
+  country       String?
+  skills        String[]  @default([])  // Array of skill tags
+  education     Json?     // [{degree, institution, year}]
+  experience    Json?     // [{title, company, startDate, endDate, description}]
+  references    Json?     // [{name, position, company, phone, email}]
+  
+  // Social Links
+  linkedIn      String?
+  portfolio     String?
+  facebook      String?
+  youtube       String?
+  twitter       String?
+  github        String?
+
+  // Payroll info
+  hourlyRate Float?   @default(0.0)
+  currency   String   @default("BDT")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? 
+
+  // Relations
+  company       Company?       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignedTasks Task[]         @relation("AssignedTasks")
+  createdTasks  Task[]         @relation("CreatedTasks")
+  timeLogs      TimeLog[]
+  screenshots   Screenshot[]
+  notifications Notification[]
+  createdInvites Invite[]
+  activityLogs  ActivityLog[]
+  subTaskTimeLogs SubTaskTimeLog[]
+
+  @@index([companyId])
+  @@index([role])
+  @@index([isPublic])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  companyId   String?
+  creatorId   String
+  clientId    String?  // If created by Freelancer, this links to the Client Company
+  title       String
+  description String?  @db.Text
+  status      TaskStatus @default(IN_PROGRESS) // default was implicit, making it explicit enum
+  publishStatus TaskPublishStatus @default(DRAFT)
+
+  // Rich Task Fields
+  priority         String    @default("MEDIUM") // LOW, MEDIUM, HIGH
+  deadline         DateTime?
+  isDraft          Boolean   @default(false)
+  
+  // Billing Fields (for single tasks without subtasks)
+  billingType      BillingType @default(HOURLY)
+  fixedPrice       Float?
+  hourlyRate       Float?
+  estimatedHours   Float?
+  scheduleType     ScheduleType?
+  scheduleDays     Int[]     @default([])
+  startTime        String?   // "09:00" format (HH:mm)
+  endTime          String?   // "17:00" format (HH:mm)
+  
+  // AI & Media Fields
+  descriptionRaw   String?   @db.Text
+  aiStructuredData Json?     // { subTasks: [], suggestedApps: [] }
+  audioUrl         String?
+  videoUrl         String?
+  attachments      String[]  @default([]) 
+  resourceLinks    String[]  @default([])
+  manualAllowedApps String[] @default([])
+  screenshotInterval Int      @default(5)  // Screenshot interval in minutes (1-60)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client      Company? @relation("ClientTasks", fields: [clientId], references: [id])
+  creator     User     @relation("CreatedTasks", fields: [creatorId], references: [id])
+  assignees   User[]   @relation("AssignedTasks")
+
+  timeLogs     TimeLog[]
+  subTasks     SubTask[]
+  activityLogs ActivityLog[]
+  screenshots  Screenshot[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([publishStatus])
+}
+
+model TimeLog {
+  id              String    @id @default(uuid())
+  userId          String
+  taskId          String?
+  startTime       DateTime
+  endTime         DateTime?
+  durationSeconds Int? // Calculated on finish
+
+  // Relations
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([startTime])
+}
+
+model Screenshot {
+  id            String   @id @default(uuid())
+  userId        String
+  taskId        String?
+  screenshotPath String   // Stores ONLY the file path (e.g., "screenshots/user1/img.png")
+  activityScore Int      @default(0)
+  recordedAt    DateTime @default(now())
+  
+  // Activity metrics
+  keyboardCount Int      @default(0)
+  mouseCount    Int      @default(0)
+  activeSeconds Int      @default(300)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([taskId])
+  @@index([recordedAt])
+}
+
+model Payment {
+  id                 String        @id @default(uuid())
+  companyId          String
+  trxID              String        @unique
+  amount             Float
+  status             PaymentStatus @default(PENDING)
+  paymentExecuteTime DateTime?
+  metadata           Json?         // Stores planName, maxEmployees, etc.
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([status])
+}
+
+// Invite Token for Team Invitations
+model Invite {
+  id          String    @id @default(uuid())
+  companyId   String
+  token       String    @unique @default(uuid())
+  email       String?   // If set, only this email can use the invite
+  createdById String
+  usedAt      DateTime? // Null = pending, Date = used
+  expiresAt   DateTime? // Optional expiry
+  
+  createdAt   DateTime  @default(now())
+
+  // Relations
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation(fields: [createdById], references: [id])
+
+  @@index([companyId])
+  @@index([token])
+}
+
+// Sub-Task for Task Bundles
+model SubTask {
+  id              String        @id @default(uuid())
+  taskId          String
+  title           String
+  description     String?       @db.Text
+  status          SubTaskStatus @default(PENDING)
+  totalSeconds    Int           @default(0)  // Accumulated time
+  billingType     BillingType   @default(HOURLY)
+  
+  // Pricing
+  fixedPrice      Float?        // For FIXED_PRICE
+  hourlyRate      Float?        // For HOURLY
+  estimatedHours  Float?        // For HOURLY estimate
+  
+  // Scheduling (for SCHEDULED type)
+  scheduleType    ScheduleType?
+  scheduleDays    Int[]         @default([]) // 0=Sun...6=Sat OR dates 1-31 for monthly
+  startTime       String?       // "09:00" format (HH:mm)
+  endTime         String?       // "17:00" format (HH:mm)
+  
+  orderIndex      Int           @default(0)
+  createdAt       DateTime      @default(now())
+  
+  // Relations
+  task            Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  timeLogs        SubTaskTimeLog[]
+  
+  @@index([taskId])
+  @@index([status])
+}
+
+// Sub-Task Time Log for individual tracking
+model SubTaskTimeLog {
+  id              String    @id @default(uuid())
+  subTaskId       String
+  userId          String
+  startTime       DateTime
+  endTime         DateTime?
+  durationSeconds Int?
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relations
+  subTask         SubTask   @relation(fields: [subTaskId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([subTaskId])
+  @@index([userId])
+}
+
+// Activity Log for 5-minute interval tracking
+model ActivityLog {
+  id              String   @id @default(uuid())
+  userId          String
+  taskId          String
+  
+  // 5-minute interval data
+  intervalStart   DateTime
+  intervalEnd     DateTime
+  
+  // Activity metrics
+  keystrokes      Int      @default(0)
+  mouseClicks     Int      @default(0)
+  mouseMovement   Int      @default(0)  // total pixels moved
+  activeSeconds   Int      @default(0)  // seconds with activity out of 300
+  
+  createdAt       DateTime @default(now())
+  
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, taskId])
+  @@index([intervalStart])
+}
