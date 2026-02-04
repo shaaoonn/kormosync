@@ -6,10 +6,11 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install ALL dependencies
-RUN npm install
+# Install ALL dependencies (Force development mode to ensure prisma is installed)
+RUN npm install --production=false
 
-# Generate Prisma client with inline env var to allow build without DB connection
+# Generate Prisma client with inline env var
+# Using the local prisma explicitly to avoid version mismatch
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
 # Copy source code
