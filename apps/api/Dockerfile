@@ -25,6 +25,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Install OpenSSL (Required for Prisma Client)
+RUN apk add --no-cache openssl
+
 # Copy everything from builder
 COPY --from=builder /app ./
 
