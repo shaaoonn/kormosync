@@ -1,0 +1,5 @@
+[phases.build]
+cmds = ["npx prisma generate"]
+
+[start]
+cmd = "npx ts-node src/server.ts"
