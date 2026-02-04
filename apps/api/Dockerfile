@@ -9,6 +9,9 @@ COPY prisma ./prisma/
 # Install ALL dependencies (including devDependencies for ts-node)
 RUN npm install
 
+# Dummy DATABASE_URL for prisma generate (actual URL will be provided at runtime)
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+
 # Generate Prisma client
 RUN npx prisma generate
 
