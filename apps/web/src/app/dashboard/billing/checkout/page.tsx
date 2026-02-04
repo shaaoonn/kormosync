@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, Suspense } from "react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
 import { Loader2, ShieldCheck, CreditCard, TestTube, CheckCircle } from "lucide-react";
@@ -14,14 +14,13 @@ const getPlanDetails = (planName: string) => {
         corporate: { name: "Corporate", employees: 500, storage: 250, price: { monthly: 24500, yearly: 205800 } },
         enterprise: { name: "Enterprise", employees: 1000, storage: 500, price: { monthly: 45000, yearly: 378000 } }
     };
-    return plans[planName as keyof typeof plans] || plans.startup; // Default to Startup if invalid
+    return plans[planName as keyof typeof plans] || plans.startup;
 };
 
-export default function CheckoutPage() {
+function CheckoutContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
 
-    // Get Query Params
     const planParam = searchParams.get('plan') || 'startup';
     const billingParam = searchParams.get('billing') || 'yearly';
 
@@ -29,7 +28,6 @@ export default function CheckoutPage() {
     const isYearly = billingParam === 'yearly';
     const amount = isYearly ? plan.price.yearly : plan.price.monthly;
 
-    // State
     const [paymentMethod, setPaymentMethod] = useState<'BKASH' | 'DEMO'>('BKASH');
     const [loading, setLoading] = useState(false);
 
@@ -44,18 +42,16 @@ export default function CheckoutPage() {
                 maxEmployees: plan.employees,
                 storageLimit: plan.storage * 1024,
                 billingCycle: isYearly ? 'YEARLY' : 'MONTHLY',
-                paymentMethod // 'BKASH' or 'DEMO'
+                paymentMethod
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
             if (paymentMethod === 'DEMO') {
                 if (res.data.success) {
-                    // Show success animation or toast, then redirect
                     router.push(`/dashboard/billing/success?trxID=DEMO-${Date.now()}&amount=${amount}&planName=${plan.name}&date=${new Date().toISOString()}`);
                 }
             } else {
-                // bKash Flow
                 if (res.data.bkashURL) {
                     window.location.href = res.data.bkashURL;
                 } else {
@@ -174,5 +170,13 @@ export default function CheckoutPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function CheckoutPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>}>
+            <CheckoutContent />
+        </Suspense>
     );
 }

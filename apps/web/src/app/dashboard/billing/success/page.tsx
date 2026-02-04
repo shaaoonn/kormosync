@@ -1,10 +1,10 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { CheckCircle, ArrowRight, Download } from "lucide-react";
+import { useEffect, useState, Suspense } from "react";
+import { CheckCircle, ArrowRight, Download, Loader2 } from "lucide-react";
 
-export default function PaymentSuccessPage() {
+function SuccessContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
 
@@ -83,5 +83,13 @@ export default function PaymentSuccessPage() {
 
             </div>
         </div>
+    );
+}
+
+export default function PaymentSuccessPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-green-600" /></div>}>
+            <SuccessContent />
+        </Suspense>
     );
 }
