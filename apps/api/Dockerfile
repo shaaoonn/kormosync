@@ -2,15 +2,18 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Ensure we are in development mode so devDependencies (like prisma) are installed
+ENV NODE_ENV=development
+
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-# Install ALL dependencies (Force development mode to ensure prisma is installed)
-RUN npm install --production=false
+# Install dependencies strictly from lockfile
+RUN npm ci
 
 # Generate Prisma client with inline env var
-# Using the local prisma explicitly to avoid version mismatch
+# This ensures it uses the installed local prisma version, not the latest from internet
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
 # Copy source code
