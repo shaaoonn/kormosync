@@ -5,7 +5,7 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npx prisma generate"]
+cmds = ["npm install @prisma/client prisma", "npx prisma generate"]
 
 [start]
 cmd = "npx ts-node src/server.ts"
