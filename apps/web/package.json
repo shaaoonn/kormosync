@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000 --webpack",
     "build": "next build",
+    "build:coolify": "NODE_OPTIONS=--max_old_space_size=4096 next build",
     "start": "next start",
     "lint": "eslint"
   },
