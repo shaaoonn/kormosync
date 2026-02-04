@@ -29,7 +29,7 @@ dotenv.config();
 
 // Initialize App
 const app: Express = express();
-const port = process.env.PORT || 8000;
+const port = process.env.PORT || 8001;
 
 // Create HTTP Server
 const httpServer = createServer(app);
@@ -37,7 +37,17 @@ const httpServer = createServer(app);
 // Initialize Socket.IO
 const io = new SocketIOServer(httpServer, {
     cors: {
-        origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:5173", "tauri://localhost", "electron://localhost", "file://"],
+        origin: [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3002",
+            "http://localhost:5173",
+            "https://appkormosync.ejobsit.com",
+            "https://adminkormosync.ejobsit.com",
+            "tauri://localhost",
+            "electron://localhost",
+            "file://"
+        ],
         methods: ["GET", "POST"],
         credentials: true
     }
@@ -52,7 +62,17 @@ app.set('io', io);
 // Middleware
 app.use(express.json());
 app.use(cors({
-    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:5173", "tauri://localhost", "electron://localhost", "file://"],
+    origin: [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:5173",
+        "https://appkormosync.ejobsit.com",
+        "https://adminkormosync.ejobsit.com",
+        "tauri://localhost",
+        "electron://localhost",
+        "file://"
+    ],
     credentials: true,
 }));
 app.use(helmet({ crossOriginResourcePolicy: false }));
