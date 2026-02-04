@@ -29,7 +29,7 @@ dotenv.config();
 
 // Initialize App
 const app: Express = express();
-const port = process.env.PORT || 8001;
+const port = process.env.PORT ? parseInt(process.env.PORT) : 8001;
 
 // Create HTTP Server
 const httpServer = createServer(app);
@@ -112,17 +112,19 @@ app.get('/', (req: Request, res: Response) => {
 
 // Start Server
 const startServer = async () => {
+    // 1. Start HTTP Server immediately
+    httpServer.listen(port, "0.0.0.0", () => {
+        console.log(`🚀 Server is running on port ${port}`);
+        console.log(`🔌 Socket.IO ready for connections`);
+    });
+
+    // 2. Attempt Database Connection (Async)
     try {
         await prisma.$connect();
         console.log('✅ Database connected successfully');
-
-        httpServer.listen(port, () => {
-            console.log(`🚀 Server is running on port ${port}`);
-            console.log(`🔌 Socket.IO ready for connections`);
-        });
     } catch (error) {
-        console.error('❌ Database connection failed', error);
-        process.exit(1);
+        console.error('❌ Database connection failed (Server still running for logs):', error);
+        // Do NOT process.exit(1) here. Let the server run so we can see logs.
     }
 };
 
