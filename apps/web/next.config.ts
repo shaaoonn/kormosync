@@ -8,8 +8,17 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Force webpack by providing a custom config
-  webpack: (config) => {
+  experimental: {
+    webpackBuildWorker: false,
+  },
+  // Optimize for low memory builds
+  webpack: (config, { isServer }) => {
+    config.optimization = {
+      ...config.optimization,
+      minimize: true,
+    };
+    // Reduce parallel compilation
+    config.parallelism = 1;
     return config;
   },
 };
