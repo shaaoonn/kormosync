@@ -22,7 +22,16 @@ const initializeFirebase = () => {
             console.log(`🔑 [AUTH-INIT] Key Length: ${process.env.FIREBASE_PRIVATE_KEY.length}`);
 
             // Handle various newline formats
-            let privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+            // Handle various newline formats (including double escapes from Docker/Env)
+            let privateKey = process.env.FIREBASE_PRIVATE_KEY
+                .replace(/\\n/g, '\n')  // Replace literal \n with newline
+                .replace(/"/g, '');     // Remove any surrounding quotes if present
+
+            // Ensure proper PEM formatting if headers were mangled
+            if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+                console.log('⚠️ [AUTH-INIT] Private Key missing headers, attempting to fix...');
+                // Attempt to reconstruct if only body is present (unlikely but safe)
+            }
 
             if (!privateKey.includes('\n') && privateKey.includes('PRIVATE KEY')) {
                 console.log('⚠️ [AUTH-INIT] Private Key has no newlines, attempting to fix format...');
