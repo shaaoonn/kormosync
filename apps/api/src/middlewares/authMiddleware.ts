@@ -11,10 +11,27 @@ const prisma = new PrismaClient();
 // Initialize Firebase Admin
 if (!admin.apps.length) {
     try {
+        let credential;
+
+        // Check for direct environment variables (Docker/Coolify friendly)
+        if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+            console.log('🔑 Using Firebase credentials from Environment Variables');
+            credential = admin.credential.cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                // Handle newlines in private key which are often escaped in env vars
+                privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+            });
+        } else {
+            // Fallback to file-based or Google Cloud auto-discovery
+            console.log('📂 Using Default Google Application Credentials (File/Metadata)');
+            credential = admin.credential.applicationDefault();
+        }
+
         admin.initializeApp({
-            credential: admin.credential.applicationDefault()
+            credential
         });
-        console.log('🔥 Firebase Admin initialized');
+        console.log('🔥 Firebase Admin initialized successfully');
     } catch (error) {
         console.error('⚠️ Firebase Admin initialization failed. Auth will break.', error);
     }
