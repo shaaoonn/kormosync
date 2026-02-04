@@ -9,33 +9,50 @@ dotenv.config();
 const prisma = new PrismaClient();
 
 // Initialize Firebase Admin
-if (!admin.apps.length) {
+// Helper to initialize Firebase
+const initializeFirebase = () => {
+    if (admin.apps.length) return true; // Already initialized
+
     try {
         let credential;
 
         // Check for direct environment variables (Docker/Coolify friendly)
         if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
-            console.log('🔑 Using Firebase credentials from Environment Variables');
+            console.log('🔑 [AUTH-INIT] Using Firebase Private Key from ENV');
+            console.log(`🔑 [AUTH-INIT] Key Length: ${process.env.FIREBASE_PRIVATE_KEY.length}`);
+
+            // Handle various newline formats
+            let privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+
+            if (!privateKey.includes('\n') && privateKey.includes('PRIVATE KEY')) {
+                console.log('⚠️ [AUTH-INIT] Private Key has no newlines, attempting to fix format...');
+                privateKey = privateKey.replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n');
+                privateKey = privateKey.replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----');
+            }
+
             credential = admin.credential.cert({
                 projectId: process.env.FIREBASE_PROJECT_ID,
                 clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-                // Handle newlines in private key which are often escaped in env vars
-                privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+                privateKey: privateKey,
             });
         } else {
-            // Fallback to file-based or Google Cloud auto-discovery
-            console.log('📂 Using Default Google Application Credentials (File/Metadata)');
+            console.log('📂 [AUTH-INIT] Using Default Credentials');
             credential = admin.credential.applicationDefault();
         }
 
         admin.initializeApp({
             credential
         });
-        console.log('🔥 Firebase Admin initialized successfully');
-    } catch (error) {
-        console.error('⚠️ Firebase Admin initialization failed. Auth will break.', error);
+        console.log('🔥 [AUTH-INIT] Firebase Admin initialized successfully');
+        return true;
+    } catch (error: any) {
+        console.error('⚠️ [AUTH-INIT] Initialization Failed:', error.message);
+        return false;
     }
-}
+};
+
+// Attempt init immediately
+initializeFirebase();
 
 // Extended user type for request
 interface ExtendedUser extends admin.auth.DecodedIdToken {
@@ -71,9 +88,13 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
     console.log(`[AUTH-DEBUG] Token Length: ${token.length}, Preview: ${token.substring(0, 10)}...`);
 
     try {
-        // Init check
+        // Init check (Lazy Load)
         if (!admin.apps.length) {
-            console.error('[AUTH-DEBUG] CRITICAL: Firebase Admin NOT initialized when verifying token!');
+            console.error('[AUTH-DEBUG] Firebase App not found. Attempting Re-Init...');
+            const success = initializeFirebase();
+            if (!success) {
+                throw new Error('Firebase Admin could not be initialized. Check Server Logs.');
+            }
         }
 
         const decodedToken = await admin.auth().verifyIdToken(token);
