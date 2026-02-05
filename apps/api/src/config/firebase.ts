@@ -12,9 +12,11 @@ export const initializeFirebase = (): void => {
         if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
             console.log('🔑 [FIREBASE] Initializing with Environment Variables...');
             // Standard Private Key Handling
-            // Coolify/Docker Env vars often treat \n as literal characters (double escaped)
-            // We only fix that specific issue as it's the standard behavior for Node.js in Docker.
-            const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+            // 1. Remove accidental surrounding quotes (common copy-paste error)
+            // 2. Replace literal "\n" (double escaped) with real newlines
+            const privateKey = process.env.FIREBASE_PRIVATE_KEY
+                .replace(/^"|"$/g, '')     // Remove surrounding quotes
+                .replace(/\\n/g, '\n');    // Fix literal newlines
             credential = admin.credential.cert({
                 projectId: process.env.FIREBASE_PROJECT_ID,
                 clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
