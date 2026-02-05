@@ -15,16 +15,28 @@ export const initializeFirebase = (): void => {
         // Priority 1: Environment Variables (Production / Docker / Coolify)
         if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
             console.log('🔑 [FIREBASE] Initializing with Environment Variables...');
-            // console.log(`🔑 [FIREBASE] Key Length: ${process.env.FIREBASE_PRIVATE_KEY.length}`); 
 
             // Robust Private Key Handling for Docker/Coolify
-            // 1. Replace literal "\n" (double escaped) with real newlines
-            // 2. Remove accidental surrounding quotes
-            let privateKey = process.env.FIREBASE_PRIVATE_KEY
-                .replace(/\\n/g, '\n')
-                .replace(/^"|"$/g, '');
+            let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-            // 3. Auto-Fix: If key is a single line but header/footer exists, split it
+            // 1. Try JSON.parse in case it's a stringified JSON string (common in some CI/CD)
+            try {
+                if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+                    privateKey = JSON.parse(privateKey);
+                }
+            } catch (e) {
+                // Not a JSON string, continue
+            }
+
+            // 2. Replace literal "\n" (double escaped) with real newlines
+            privateKey = privateKey.replace(/\\n/g, '\n');
+
+            // 3. Remove any remaining wrapping quotes if they weren't handled by JSON.parse
+            if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+                privateKey = privateKey.slice(1, -1);
+            }
+
+            // 4. Auto-Fix: If key is a still single line but header/footer exists, force split
             if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
                 console.log('⚠️ [FIREBASE] Private Key is single-line. Attempting auto-fix formatting...');
                 privateKey = privateKey
