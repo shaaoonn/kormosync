@@ -31,6 +31,10 @@ dotenv.config();
 const app: Express = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8001;
 
+// Initialize Firebase Admin (Professional Pattern)
+import { initializeFirebase } from './config/firebase';
+initializeFirebase();
+
 // Create HTTP Server
 const httpServer = createServer(app);
 
