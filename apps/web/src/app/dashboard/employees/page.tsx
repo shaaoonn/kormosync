@@ -5,6 +5,7 @@ import Link from "next/link";
 import { UserPlus, Link2, Trash2, Copy, Mail, Check, Users, Clock, Eye } from "lucide-react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
+import toast from "react-hot-toast";
 
 interface Member {
     id: string;
@@ -79,7 +80,7 @@ export default function EmployeesPage() {
             setInviteEmail("");
             fetchMembers();
         } catch (error: any) {
-            alert(error.response?.data?.error || "Failed to send invite");
+            toast.error(error.response?.data?.error || "Failed to send invite");
         } finally {
             setSending(false);
         }
@@ -100,7 +101,7 @@ export default function EmployeesPage() {
             });
             fetchMembers();
         } catch (error: any) {
-            alert(error.response?.data?.error || "Failed to remove member");
+            toast.error(error.response?.data?.error || "Failed to remove member");
         }
     };
 

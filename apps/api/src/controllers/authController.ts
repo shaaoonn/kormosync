@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 import admin from 'firebase-admin';
 
-const prisma = new PrismaClient();
 
 export const syncUser = async (req: Request, res: Response) => {
     try {
@@ -103,5 +102,20 @@ export const syncUser = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Sync User Error:', error);
         return res.status(500).json({ error: 'Failed to sync user' });
+    }
+};
+
+export const getMe = async (req: Request, res: Response) => {
+    try {
+        if (!req.user || !req.user.dbUser) {
+            return res.status(401).json({ success: false, error: 'User not found in database' });
+        }
+        return res.json({
+            success: true,
+            user: req.user.dbUser
+        });
+    } catch (error) {
+        console.error('Get Me Error:', error);
+        return res.status(500).json({ error: 'Failed to get user profile' });
     }
 };

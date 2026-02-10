@@ -78,6 +78,62 @@ enum SubTaskStatus {
   COMPLETED
 }
 
+enum TaskAssignmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum LeaveType {
+  PAID
+  UNPAID
+  SICK
+  HALF_DAY
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ON_LEAVE
+  ABSENT
+  PARTIAL
+  HOLIDAY
+}
+
+enum SalaryType {
+  HOURLY
+  MONTHLY
+}
+
+enum RecurringType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum DependencyType {
+  BLOCKS
+  BLOCKED_BY
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DROPDOWN
+  DATE
+}
+
+enum ReviewAction {
+  APPROVED
+  REQUEST_CHANGES
+}
+
 // --------------------------------------
 // Models
 // --------------------------------------
@@ -101,9 +157,16 @@ model Company {
   trialEmployeeEndDate DateTime?         // Free plan: employee access expires after this date
   hasClaimedTrial      Boolean           @default(false)
 
+  // Feature Gates (Phase 5.2)
+  enabledFeatures      String[]          @default(["tasks", "screenshots", "activity", "payroll"])
+
+  // Payroll Settings
+  overtimeRate         Float             @default(1.5)   // Overtime multiplier (1.5x)
+  defaultExpectedHours Float             @default(8.0)   // Daily expected work hours
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime? 
+  deletedAt DateTime?
 
   // Relations
   users    User[]
@@ -111,6 +174,10 @@ model Company {
   payments Payment[]
   invites  Invite[]
   clientTasks Task[] @relation("ClientTasks")
+  leaveBalances     LeaveBalance[]
+  leaveRequests     LeaveRequest[]
+  dailyAttendance   DailyAttendance[]
+  customFieldDefinitions CustomFieldDefinition[]
 
   @@index([subscriptionStatus])
 }
@@ -147,12 +214,16 @@ model User {
   github        String?
 
   // Payroll info
-  hourlyRate Float?   @default(0.0)
-  currency   String   @default("BDT")
+  hourlyRate          Float?      @default(0.0)
+  currency            String      @default("BDT")
+  salaryType          SalaryType  @default(HOURLY)
+  monthlySalary       Float?      @default(0.0)
+  expectedHoursPerDay Float       @default(8.0)
+  minDailyHours       Float       @default(0)    // Minimum daily hours for attendance (0 = disabled)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime? 
+  deletedAt DateTime?
 
   // Relations
   company       Company?       @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -164,6 +235,17 @@ model User {
   createdInvites Invite[]
   activityLogs  ActivityLog[]
   subTaskTimeLogs SubTaskTimeLog[]
+  taskAuditLogs TaskAuditLog[]
+  appUsageLogs  AppUsageLog[]
+  taskAssignments TaskAssignment[]
+  workProofs   WorkProof[]
+  leaveRequests     LeaveRequest[]  @relation("UserLeaveRequests")
+  approvedLeaves    LeaveRequest[]  @relation("ApprovedLeaves")
+  leaveBalances     LeaveBalance[]
+  dailyAttendance   DailyAttendance[]
+  reviewerTasks     Task[]          @relation("ReviewerTasks")
+  reviewComments    ReviewComment[]
+  taskNotes         TaskNote[]
 
   @@index([companyId])
   @@index([role])
@@ -210,16 +292,56 @@ model Task {
   scheduleDays     Int[]     @default([])
   startTime        String?   // "09:00" format (HH:mm)
   endTime          String?   // "17:00" format (HH:mm)
-  
+  allowOvertime    Boolean   @default(false) // Allow work beyond endTime?
+
+  // Activity Threshold & Penalty (Phase 2)
+  activityThreshold    Int      @default(40)    // Minimum activity % (0-100)
+  penaltyEnabled       Boolean  @default(false)
+  penaltyType          String?  // "DEDUCT_TIME" | "NOTIFY_ADMIN" | "PAUSE_TIMER"
+  penaltyThresholdMins Int      @default(15)    // Consecutive low-activity minutes before penalty
+
+  // Monitoring Mode (Phase 6.2)
+  monitoringMode   String    @default("TRANSPARENT") // "TRANSPARENT" | "STEALTH"
+
+  // Task Control (Admin pause/resume)
+  isActive         Boolean   @default(true)    // Admin can pause/resume anytime
+  pausedAt         DateTime?                   // When task was paused
+  pausedReason     String?                     // Optional reason for pausing
+
+  // Data Collection Toggles
+  screenshotEnabled  Boolean @default(true)    // Take screenshots for this task?
+  activityEnabled    Boolean @default(true)    // Track activity (keystrokes/clicks)?
+  allowRemoteCapture Boolean @default(true)    // Admin can capture employee screen remotely
+
   // AI & Media Fields
   descriptionRaw   String?   @db.Text
   aiStructuredData Json?     // { subTasks: [], suggestedApps: [] }
   audioUrl         String?
   videoUrl         String?
-  attachments      String[]  @default([]) 
+  attachments      String[]  @default([])
   resourceLinks    String[]  @default([])
   manualAllowedApps String[] @default([])
   screenshotInterval Int      @default(5)  // Screenshot interval in minutes (1-60)
+
+  // Recurring Task Fields
+  isRecurring      Boolean        @default(false)
+  recurringType    RecurringType?
+  recurringEndDate DateTime?
+  recurringCount   Int?           // Max occurrences (null = unlimited until endDate)
+  parentTaskId     String?        // Link to template/parent recurring task
+  recurringIndex   Int?           // Which occurrence (1, 2, 3...)
+
+  // Budget
+  maxBudget        Float?         // Maximum cost limit for this task
+
+  // Review/QA
+  reviewerId       String?        // Assigned reviewer user ID
+
+  // Employee Completion & Break Settings (Phase 10)
+  employeeCanComplete   Boolean  @default(true)    // Can employee mark task as complete?
+  breakReminderEnabled  Boolean  @default(false)   // Enable break reminders?
+  breakAfterHours       Float    @default(2.0)     // Hours of continuous work before suggesting break
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -228,15 +350,31 @@ model Task {
   client      Company? @relation("ClientTasks", fields: [clientId], references: [id])
   creator     User     @relation("CreatedTasks", fields: [creatorId], references: [id])
   assignees   User[]   @relation("AssignedTasks")
+  reviewer    User?    @relation("ReviewerTasks", fields: [reviewerId], references: [id])
+
+  // Self-relation for recurring tasks
+  parentTask  Task?    @relation("RecurringChildren", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  childTasks  Task[]   @relation("RecurringChildren")
 
   timeLogs     TimeLog[]
   subTasks     SubTask[]
   activityLogs ActivityLog[]
   screenshots  Screenshot[]
+  auditLogs    TaskAuditLog[]
+  appUsageLogs AppUsageLog[]
+  taskAssignments TaskAssignment[]
+  workProofs   WorkProof[]
+  dependencies    TaskDependency[]  @relation("TaskDependencies")
+  dependedOnBy    TaskDependency[]  @relation("DependsOnTask")
+  checklist       TaskChecklist[]
+  customFieldValues TaskCustomFieldValue[]
+  reviewComments  ReviewComment[]
+  taskNotes       TaskNote[]
 
   @@index([companyId])
   @@index([status])
   @@index([publishStatus])
+  @@index([parentTaskId])
 }
 
 model TimeLog {
@@ -259,21 +397,25 @@ model Screenshot {
   id            String   @id @default(uuid())
   userId        String
   taskId        String?
+  subTaskId     String?  // Link to specific sub-task for bundles
   screenshotPath String   // Stores ONLY the file path (e.g., "screenshots/user1/img.png")
   activityScore Int      @default(0)
   recordedAt    DateTime @default(now())
-  
+  deviceId      String?  // Hardware fingerprint — detects multi-device usage
+
   // Activity metrics
   keyboardCount Int      @default(0)
   mouseCount    Int      @default(0)
   activeSeconds Int      @default(300)
 
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  task Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task    Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  subTask SubTask? @relation(fields: [subTaskId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([taskId])
+  @@index([subTaskId])
   @@index([recordedAt])
 }
 
@@ -335,14 +477,17 @@ model SubTask {
   scheduleDays    Int[]         @default([]) // 0=Sun...6=Sat OR dates 1-31 for monthly
   startTime       String?       // "09:00" format (HH:mm)
   endTime         String?       // "17:00" format (HH:mm)
-  
+  allowOvertime   Boolean       @default(false) // Allow work beyond endTime?
+
   orderIndex      Int           @default(0)
   createdAt       DateTime      @default(now())
   
   // Relations
   task            Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
   timeLogs        SubTaskTimeLog[]
-  
+  screenshots     Screenshot[]
+  workProofs      WorkProof[]
+
   @@index([taskId])
   @@index([status])
 }
@@ -390,4 +535,362 @@ model ActivityLog {
   
   @@index([userId, taskId])
   @@index([intervalStart])
+  @@index([userId, taskId, intervalStart])  // Composite index for filtered queries
+}
+
+// Task Audit Log - tracks all task changes (Phase 2)
+model TaskAuditLog {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  action    String   // "CREATED" | "UPDATED" | "STATUS_CHANGED" | "ASSIGNED" | "DELETED"
+  field     String?  // Which field changed (e.g., "status", "title", "priority")
+  oldValue  String?  @db.Text
+  newValue  String?  @db.Text
+  createdAt DateTime @default(now())
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// App Usage Log - tracks which applications employees use (Phase 3)
+model AppUsageLog {
+  id          String   @id @default(uuid())
+  userId      String
+  taskId      String
+  appName     String
+  windowTitle String?
+  durationSec Int      @default(0)
+  recordedAt  DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId, taskId])
+  @@index([recordedAt])
+}
+
+// ============================================================
+// Phase 4: Payroll Engine
+// ============================================================
+
+// Pay Period - monthly billing cycle
+model PayPeriod {
+  id          String   @id @default(uuid())
+  companyId   String
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("OPEN") // "OPEN" | "LOCKED" | "PAID"
+  totalAmount Float    @default(0.0)
+  currency    String   @default("BDT")
+  createdAt   DateTime @default(now())
+  closedAt    DateTime?
+
+  invoices Invoice[]
+
+  @@unique([companyId, startDate])
+  @@index([companyId])
+  @@index([status])
+}
+
+// Invoice - per-employee per-period
+model Invoice {
+  id            String   @id @default(uuid())
+  payPeriodId   String
+  userId        String
+  companyId     String
+  totalHours    Float    @default(0.0)
+  hourlyRate    Float    @default(0.0)
+  grossAmount   Float    @default(0.0)
+  deductions    Float    @default(0.0) // Penalty deductions
+  bonuses       Float    @default(0.0)
+  netAmount     Float    @default(0.0)
+  currency      String   @default("BDT")
+  status        String   @default("DRAFT") // "DRAFT" | "APPROVED" | "PAID" | "CANCELLED"
+  notes         String?  @db.Text
+  approvedAt    DateTime?
+  paidAt        DateTime?
+
+  // Leave & Overtime breakdown
+  leaveHours       Float    @default(0.0)
+  leavePay         Float    @default(0.0)
+  overtimeHours    Float    @default(0.0)
+  overtimePay      Float    @default(0.0)
+  overtimeRate     Float    @default(1.5)
+  salaryType       String   @default("HOURLY") // "HOURLY" | "MONTHLY"
+  monthlySalary    Float    @default(0.0)
+  workedDays       Int      @default(0)
+  totalWorkingDays Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  payPeriod PayPeriod @relation(fields: [payPeriodId], references: [id], onDelete: Cascade)
+
+  @@unique([payPeriodId, userId])
+  @@index([userId])
+  @@index([companyId])
+  @@index([status])
+}
+
+// Wallet - employee earnings balance
+model Wallet {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  balance       Float    @default(0.0)
+  totalEarned   Float    @default(0.0)
+  totalWithdrawn Float   @default(0.0)
+  currency      String   @default("BDT")
+  updatedAt     DateTime @updatedAt
+
+  transactions WalletTransaction[]
+
+  @@index([userId])
+}
+
+// Wallet Transaction Log
+model WalletTransaction {
+  id          String   @id @default(uuid())
+  walletId    String
+  type        String   // "CREDIT" | "DEBIT" | "WITHDRAWAL"
+  amount      Float
+  description String?
+  reference   String?  // invoiceId or payment reference
+  createdAt   DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([createdAt])
+}
+
+// App Category - defines productivity categories for apps/URLs (Phase 3)
+model AppCategory {
+  id         String  @id @default(uuid())
+  companyId  String? // null = global default
+  appPattern String  // regex or app name pattern
+  category   String  // "PRODUCTIVE" | "UNPRODUCTIVE" | "NEUTRAL"
+  label      String  // Display name
+
+  @@index([companyId])
+}
+
+// ============================================================
+// Phase 7: Task Assignment Approval & Work Proofs
+// ============================================================
+
+// Task Assignment - tracks approval status for each assignee
+model TaskAssignment {
+  id          String               @id @default(uuid())
+  taskId      String
+  userId      String
+  status      TaskAssignmentStatus @default(PENDING)
+  assignedAt  DateTime             @default(now())
+  respondedAt DateTime?
+
+  // Relations
+  task        Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([userId, status])
+}
+
+// Work Proof - employee-submitted proof during work
+model WorkProof {
+  id          String   @id @default(uuid())
+  taskId      String
+  subTaskId   String?
+  userId      String
+  summary     String
+  notes       String?  @db.Text
+  attachments String[] @default([])  // MinIO file paths
+  createdAt   DateTime @default(now())
+
+  // Relations
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  subTask     SubTask? @relation(fields: [subTaskId], references: [id], onDelete: SetNull)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+}
+
+// ============================================================
+// Phase 8: Leave, Attendance & Payroll Ecosystem
+// ============================================================
+
+model LeaveBalance {
+  id            String   @id @default(uuid())
+  userId        String
+  companyId     String
+  year          Int
+  paidLeave     Int      @default(10)
+  sickLeave     Int      @default(7)
+  unpaidLeave   Int      @default(0)
+  paidUsed      Int      @default(0)
+  sickUsed      Int      @default(0)
+  unpaidUsed    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year])
+  @@index([companyId, year])
+}
+
+model LeaveRequest {
+  id             String      @id @default(uuid())
+  userId         String
+  companyId      String
+  type           LeaveType
+  startDate      DateTime
+  endDate        DateTime
+  totalDays      Float       // 0.5 for half day
+  reason         String?     @db.Text
+  status         LeaveStatus @default(PENDING)
+  approvedBy     String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user     User    @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
+  approver User?   @relation("ApprovedLeaves", fields: [approvedBy], references: [id])
+  company  Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([companyId, status])
+  @@index([startDate, endDate])
+}
+
+model DailyAttendance {
+  id                 String           @id @default(uuid())
+  userId             String
+  companyId          String
+  date               DateTime         @db.Date
+  status             AttendanceStatus @default(ABSENT)
+  totalWorkedSeconds Int              @default(0)
+  expectedSeconds    Int              @default(28800) // 8 hours default
+  overtimeSeconds    Int              @default(0)
+  tasksSummary       Json?            // [{taskId, taskTitle, seconds}]
+  earningsToday      Float            @default(0.0)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([companyId, date])
+  @@index([status])
+}
+
+// ============================================================
+// Phase 9: Task Dependencies, Checklist, Custom Fields, Review
+// ============================================================
+
+// Task Dependency — blocker/blocked-by relationships
+model TaskDependency {
+  id             String         @id @default(uuid())
+  taskId         String
+  dependsOnTaskId String
+  type           DependencyType @default(BLOCKS)
+  createdAt      DateTime       @default(now())
+
+  task           Task           @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTask  Task           @relation("DependsOnTask", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dependsOnTaskId])
+  @@index([taskId])
+  @@index([dependsOnTaskId])
+}
+
+// Task Checklist — lightweight to-do items within a task
+model TaskChecklist {
+  id          String   @id @default(uuid())
+  taskId      String
+  title       String
+  isCompleted Boolean  @default(false)
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+// Custom Field Definition — company-level field definitions
+model CustomFieldDefinition {
+  id        String          @id @default(uuid())
+  companyId String
+  name      String
+  type      CustomFieldType @default(TEXT)
+  options   String[]        @default([]) // For DROPDOWN type
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+
+  company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  values    TaskCustomFieldValue[]
+
+  @@index([companyId])
+}
+
+// Task Custom Field Value — per-task values for custom fields
+model TaskCustomFieldValue {
+  id        String   @id @default(uuid())
+  taskId    String
+  fieldId   String
+  value     String   // Stored as string, parsed by type
+  createdAt DateTime @default(now())
+
+  task      Task                  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  field     CustomFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, fieldId])
+  @@index([taskId])
+  @@index([fieldId])
+}
+
+// Review Comment — QA review history for tasks
+model ReviewComment {
+  id        String       @id @default(uuid())
+  taskId    String
+  userId    String
+  action    ReviewAction
+  comment   String?      @db.Text
+  createdAt DateTime     @default(now())
+
+  task      Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+}
+
+// ============================================================
+// Phase 10: Task Notes (Work Journal)
+// ============================================================
+
+model TaskNote {
+  id        String   @id @default(uuid())
+  taskId    String
+  subTaskId String?
+  userId    String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
 }

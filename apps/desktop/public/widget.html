@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <title>KormoSync Tracker</title>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
         rel="stylesheet">
     <style>
         * {
@@ -17,12 +17,10 @@
         body {
             font-family: 'Inter', sans-serif;
             background: rgba(10, 14, 26, 0.95);
-            /* #0a0e1a mostly opaque */
             backdrop-filter: blur(12px);
-            border-radius: 16px;
+            border-radius: 14px;
             border: 1px solid rgba(234, 179, 8, 0.2);
-            /* Subtle yellow border */
-            padding: 12px 16px;
+            padding: 10px 12px;
             color: #f1f5f9;
             cursor: default;
             user-select: none;
@@ -31,122 +29,34 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
         }
 
-        /* Drag Handle / Header */
-        .header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        /* Pulse Dot */
-        .rec-dot {
-            width: 8px;
-            height: 8px;
-            background: #ef4444;
-            border-radius: 50%;
-            box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-                opacity: 1;
-            }
-
-            50% {
-                transform: scale(1.3);
-                opacity: 0.6;
-            }
-
-            100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-
-        /* Task Name */
-        .task-container {
-            flex: 1;
-            min-width: 0;
-            /* allows truncation */
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .task-label {
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #94a3b8;
-            font-weight: 500;
-        }
-
-        .task-name {
-            font-size: 13px;
-            font-weight: 600;
-            color: #f1f5f9;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        /* Timer Row */
-        .timer-container {
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            margin-top: 4px;
-        }
-
-        .elapsed {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 28px;
-            font-weight: 700;
-            color: #eab308;
-            text-shadow: 0 0 20px rgba(234, 179, 8, 0.15);
-            letter-spacing: -0.5px;
-        }
-
-        .remaining {
-            font-size: 11px;
-            color: #64748b;
-            font-weight: 500;
-        }
-
-        .remaining span {
-            color: #f59e0b;
-        }
-
-        /* Actions */
+        /* Expand button — top right */
         .actions {
             position: absolute;
-            top: 12px;
-            right: 12px;
+            top: 8px;
+            right: 8px;
             display: flex;
-            gap: 8px;
+            gap: 6px;
             -webkit-app-region: no-drag;
+            z-index: 10;
         }
 
         .btn {
-            width: 26px;
-            height: 26px;
-            border-radius: 8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
             border: none;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.2s ease;
         }
 
         .btn svg {
-            width: 14px;
-            height: 14px;
+            width: 12px;
+            height: 12px;
             stroke-width: 2.5;
         }
 
@@ -156,73 +66,265 @@
             border: 1px solid rgba(71, 85, 105, 0.3);
         }
 
-        .btn-expand:hover {
+        .btn-expand:hover,
+        .btn-minimize:hover {
             background: rgba(51, 65, 85, 0.8);
             color: #fff;
             transform: translateY(-1px);
         }
 
-        .btn-stop {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.1);
+        .btn-minimize {
+            background: rgba(30, 41, 59, 0.6);
+            color: #cbd5e1;
+            border: 1px solid rgba(71, 85, 105, 0.3);
         }
 
-        .btn-stop:hover {
-            background: #ef4444;
-            color: white;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        /* Task list */
+        .tasks-container {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding-right: 2px;
+        }
+
+        .tasks-container::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .tasks-container::-webkit-scrollbar-thumb {
+            background: rgba(234, 179, 8, 0.3);
+            border-radius: 3px;
+        }
+
+        .task-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            background: rgba(30, 41, 59, 0.4);
+            border-radius: 8px;
+            border: 1px solid rgba(71, 85, 105, 0.15);
+            min-height: 38px;
+        }
+
+        /* Status dot */
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .status-dot.active {
+            background: #22c55e;
+            box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.paused {
+            background: #f59e0b;
+            box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Task info */
+        .task-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .task-name {
+            font-size: 11px;
+            font-weight: 600;
+            color: #f1f5f9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+
+        .subtask-name {
+            font-size: 9px;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+
+        /* Timer */
+        .task-timer {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 700;
+            color: #eab308;
+            flex-shrink: 0;
+            letter-spacing: -0.3px;
+        }
+
+        .task-timer.paused {
+            color: #f59e0b;
+            opacity: 0.7;
+        }
+
+        /* Total bar — shown when 2+ tasks */
+        .total-bar {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            margin-top: 4px;
+            background: rgba(234, 179, 8, 0.08);
+            border-radius: 8px;
+            border: 1px solid rgba(234, 179, 8, 0.15);
+        }
+
+        .total-bar.visible {
+            display: flex;
+        }
+
+        .total-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #eab308;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .total-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            font-weight: 700;
+            color: #eab308;
+            text-shadow: 0 0 12px rgba(234, 179, 8, 0.2);
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            color: #64748b;
+            font-size: 12px;
         }
     </style>
 </head>
 
 <body>
-    <!-- Drag Region Cover -->
+    <!-- Widget actions -->
     <div class="actions">
-        <button class="btn btn-expand" onclick="expandApp()" title="Expand">
+        <button class="btn btn-minimize" onclick="minimizeWidget()" title="Minimize widget">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M5 12h14" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </button>
+        <button class="btn btn-expand" onclick="expandApp()" title="Expand to main window">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
         </button>
-        <button class="btn btn-stop" onclick="stopTracking()" title="Stop">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />
-            </svg>
-        </button>
     </div>
 
-    <div class="header">
-        <div class="rec-dot"></div>
-        <div class="task-container">
-            <div class="task-label">Current Task</div>
-            <div class="task-name" id="taskName">Tracking...</div>
-        </div>
+    <!-- Tasks list -->
+    <div class="tasks-container" id="tasksContainer">
+        <div class="empty-state" id="emptyState">Waiting for tasks...</div>
     </div>
 
-    <div class="timer-container">
-        <div class="elapsed" id="elapsed">00:00:00</div>
-        <div class="remaining" id="remaining"></div>
+    <!-- Total time bar -->
+    <div class="total-bar" id="totalBar">
+        <span class="total-label">Total</span>
+        <span class="total-time" id="totalTime">00:00:00</span>
     </div>
 
     <script>
-        const { ipcRenderer } = require('electron');
-
         function expandApp() {
-            ipcRenderer.send('EXPAND_APP');
+            window.electronWidget.expandApp();
         }
 
-        function stopTracking() {
-            ipcRenderer.send('STOP_TRACKING_FROM_WIDGET');
+        function minimizeWidget() {
+            window.electronWidget.minimizeWidget();
         }
 
-        ipcRenderer.on('UPDATE_WIDGET', (event, data) => {
-            document.getElementById('taskName').textContent = data.taskName || 'No active task';
-            document.getElementById('elapsed').textContent = data.elapsed || '00:00:00';
-            if (data.remaining) {
-                document.getElementById('remaining').innerHTML = 'Remaining: <span>' + data.remaining + '</span>';
+        function renderTasks(tasks) {
+            const container = document.getElementById('tasksContainer');
+            const emptyState = document.getElementById('emptyState');
+            const totalBar = document.getElementById('totalBar');
+
+            if (!tasks || tasks.length === 0) {
+                container.innerHTML = '<div class="empty-state">Waiting for tasks...</div>';
+                totalBar.classList.remove('visible');
+                return;
+            }
+
+            container.innerHTML = '';
+
+            tasks.forEach(function(task) {
+                const row = document.createElement('div');
+                row.className = 'task-row';
+
+                const dot = document.createElement('div');
+                dot.className = 'status-dot ' + (task.isPaused ? 'paused' : 'active');
+
+                const info = document.createElement('div');
+                info.className = 'task-info';
+
+                const name = document.createElement('div');
+                name.className = 'task-name';
+                name.textContent = task.taskName || 'Task';
+                name.title = task.taskName || '';
+
+                info.appendChild(name);
+
+                if (task.subTaskName) {
+                    const sub = document.createElement('div');
+                    sub.className = 'subtask-name';
+                    sub.textContent = task.subTaskName;
+                    sub.title = task.subTaskName;
+                    info.appendChild(sub);
+                }
+
+                const timer = document.createElement('div');
+                timer.className = 'task-timer' + (task.isPaused ? ' paused' : '');
+                timer.textContent = task.elapsed || '00:00:00';
+
+                row.appendChild(dot);
+                row.appendChild(info);
+                row.appendChild(timer);
+                container.appendChild(row);
+            });
+
+            // Show total bar only for 2+ tasks
+            if (tasks.length > 1) {
+                totalBar.classList.add('visible');
             } else {
-                document.getElementById('remaining').innerHTML = '';
+                totalBar.classList.remove('visible');
+            }
+        }
+
+        window.electronWidget.onUpdate(function(data) {
+            if (data.tasks && data.tasks.length > 0) {
+                renderTasks(data.tasks);
+                document.getElementById('totalTime').textContent = data.totalElapsed || '00:00:00';
+            } else {
+                // Legacy single-task fallback
+                renderTasks([{
+                    taskName: data.taskName || 'Task',
+                    subTaskName: '',
+                    elapsed: data.elapsed || '00:00:00',
+                    isPaused: false,
+                }]);
             }
         });
     </script>

@@ -5,13 +5,17 @@ import {
     getTaskActivity,
     getUserActivity,
     getTodayStats,
-    getCompanyActivity
+    getCompanyActivity,
+    heartbeat
 } from '../controllers/activityController';
 
 const router = Router();
 
 // Activity Logging (from desktop app)
 router.post('/log', authenticateUser, logActivity);
+
+// Heartbeat — real-time current app info from desktop
+router.post('/heartbeat', authenticateUser, heartbeat);
 
 // Activity Retrieval
 router.get('/task/:taskId', authenticateUser, getTaskActivity);

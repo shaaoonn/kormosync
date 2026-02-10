@@ -1,12 +1,37 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 import { getAuth } from "firebase-admin/auth";
 import multer from 'multer';
 import path from 'path';
+import { invalidateEarningsCache } from '../services/earningsService';
 
-import { getSignedViewUrl } from '../utils/minioClient'; // Add this import
+import { getSignedViewUrl } from '../utils/minioClient';
+import { logAudit, logFieldChanges } from '../services/auditService';
 
-const prisma = new PrismaClient();
+// ============================================================
+// Helper: Batch-process async operations to prevent MinIO overload
+// Instead of 100+ concurrent getSignedViewUrl calls, processes N at a time
+// ============================================================
+async function batchProcess<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+    const results: R[] = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map(fn));
+        results.push(...batchResults);
+    }
+    return results;
+}
+
+// Safe URL signing — returns null on failure instead of throwing
+async function safeSignUrl(path: string | null): Promise<string | null> {
+    if (!path) return null;
+    try {
+        return await getSignedViewUrl(path);
+    } catch {
+        return null;
+    }
+}
+
 
 // Multer Setup
 // Multer Setup (unchanged)
@@ -50,7 +75,31 @@ export const createTask = async (req: Request, res: Response) => {
             screenshotInterval,
             assigneeIds,
             clientEmail,
-            videoUrl // Capture videoUrl
+            videoUrl,
+            // Phase 2: Activity threshold & penalty fields
+            activityThreshold,
+            penaltyEnabled,
+            penaltyType,
+            penaltyThresholdMins,
+            // Phase 6: Monitoring & resource fields
+            monitoringMode,
+            resourceLinks,
+            // Data collection toggles
+            screenshotEnabled,
+            activityEnabled,
+            // Overtime
+            allowOvertime,
+            // Phase 9: Recurring, Budget, Review
+            isRecurring,
+            recurringType,
+            recurringEndDate,
+            recurringCount,
+            maxBudget,
+            reviewerId,
+            // Phase 10: Employee completion & break settings
+            employeeCanComplete,
+            breakReminderEnabled,
+            breakAfterHours,
         } = req.body;
 
         // Common Data
@@ -64,9 +113,34 @@ export const createTask = async (req: Request, res: Response) => {
             isDraft: !!isDraft,
             screenshotInterval: Math.min(60, Math.max(1, screenshotInterval || 5)),
             manualAllowedApps: req.body.manualAllowedApps || [],
-            resourceLinks: [],
+            resourceLinks: Array.isArray(resourceLinks) ? resourceLinks.filter((l: string) => l.trim()) : [],
             attachments: [],
-            videoUrl: extractKey(videoUrl) // Sanitize videoUrl
+            videoUrl: extractKey(videoUrl),
+            monitoringMode: monitoringMode === 'STEALTH' ? 'STEALTH' : 'TRANSPARENT',
+            // Data collection toggles
+            screenshotEnabled: screenshotEnabled !== undefined ? !!screenshotEnabled : true,
+            activityEnabled: activityEnabled !== undefined ? !!activityEnabled : true,
+            allowRemoteCapture: req.body.allowRemoteCapture !== undefined ? !!req.body.allowRemoteCapture : true,
+            // Phase 2: Activity & penalty settings
+            activityThreshold: activityThreshold !== undefined ? Math.min(100, Math.max(0, activityThreshold)) : 40,
+            penaltyEnabled: !!penaltyEnabled,
+            penaltyType: penaltyType || null,
+            penaltyThresholdMins: penaltyThresholdMins || 15,
+            // Overtime
+            allowOvertime: !!allowOvertime,
+            // Recurring
+            isRecurring: !!isRecurring,
+            recurringType: isRecurring ? (recurringType || null) : null,
+            recurringEndDate: isRecurring && recurringEndDate ? new Date(recurringEndDate) : null,
+            recurringCount: isRecurring && recurringCount ? parseInt(recurringCount) : null,
+            // Budget
+            maxBudget: maxBudget ? parseFloat(maxBudget) : null,
+            // Reviewer
+            reviewerId: reviewerId || null,
+            // Phase 10: Employee completion & break
+            employeeCanComplete: employeeCanComplete !== undefined ? !!employeeCanComplete : true,
+            breakReminderEnabled: !!breakReminderEnabled,
+            breakAfterHours: breakAfterHours ? parseFloat(breakAfterHours) : 2.0,
         };
 
         // Handle File Uploads (Attachments)
@@ -100,27 +174,47 @@ export const createTask = async (req: Request, res: Response) => {
             data.status = 'IN_PROGRESS';
         }
 
-        // Create Task
+        // Create Task (assignees NOT connected directly — they go through approval)
         const task = await prisma.task.create({
             data: {
                 ...data,
-                assignees: (user.role !== 'FREELANCER' && assigneeIds?.length) ? {
-                    connect: assigneeIds.map((id: string) => ({ id }))
-                } : undefined
             }
         });
 
-        // Notify Assignees via Socket.IO
+        // Audit log: task created
+        await logAudit({ taskId: task.id, userId: user.id, action: 'CREATED' });
+
+        // Create TaskAssignment records for approval workflow
         const io = req.app.get('io');
-        if (io && assigneeIds && assigneeIds.length > 0) {
-            assigneeIds.forEach((assigneeId: string) => {
-                io.to(`user:${assigneeId}`).emit('task:assigned', {
+        if (user.role !== 'FREELANCER' && assigneeIds?.length) {
+            await prisma.taskAssignment.createMany({
+                data: assigneeIds.map((assigneeId: string) => ({
                     taskId: task.id,
-                    title: task.title,
-                    createdBy: user.name
-                });
-                console.log(`📢 Emitted task:assigned to user:${assigneeId}`);
+                    userId: assigneeId,
+                    status: 'PENDING' as const,
+                })),
+                skipDuplicates: true,
             });
+
+            // Notify each assignee via notification + socket
+            for (const assigneeId of assigneeIds) {
+                await prisma.notification.create({
+                    data: {
+                        userId: assigneeId,
+                        title: 'নতুন টাস্ক অ্যাসাইনমেন্ট',
+                        message: `আপনাকে "${task.title}" টাস্কে অ্যাসাইন করা হয়েছে। অনুগ্রহ করে গ্রহণ বা প্রত্যাখ্যান করুন।`,
+                        type: 'INFO',
+                    }
+                });
+
+                if (io) {
+                    io.to(`user:${assigneeId}`).emit('assignment:pending', {
+                        taskId: task.id,
+                        title: task.title,
+                        createdBy: user.dbUser?.name || user.email,
+                    });
+                }
+            }
         }
 
         return res.json({ success: true, task });
@@ -144,12 +238,27 @@ export const createTask = async (req: Request, res: Response) => {
 // I'll try to do `createTask` first.
 
 
-// Start Task (Time Tracking)
+// Start Task (Time Tracking) — with dependency check
 export const startTask = async (req: Request, res: Response) => {
     try {
         const { taskId } = req.body;
         const user = getUser(req);
         if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        // Check if task is blocked by incomplete dependencies
+        const blockers = await prisma.taskDependency.findMany({
+            where: { taskId },
+            include: { dependsOnTask: { select: { id: true, title: true, status: true } } }
+        });
+
+        const incompleteBlockers = blockers.filter(b => b.dependsOnTask.status !== 'DONE');
+        if (incompleteBlockers.length > 0) {
+            const blockerNames = incompleteBlockers.map(b => b.dependsOnTask.title).join(', ');
+            return res.status(403).json({
+                error: `এই টাস্ক ব্লক করা আছে। আগে শেষ করুন: ${blockerNames}`,
+                blockedBy: incompleteBlockers.map(b => b.dependsOnTask)
+            });
+        }
 
         const timeLog = await prisma.timeLog.create({
             data: {
@@ -215,8 +324,16 @@ export const getTasks = async (req: Request, res: Response) => {
             where.status = status;
         }
 
-        console.log('🔍 FETCHING TASKS FOR USER:', user.email, user.role);
-        console.log('🔍 WHERE CLAUSE:', JSON.stringify(where, null, 2));
+        const fs = require('fs');
+        const path = require('path');
+        const logFile = path.resolve(__dirname, '../../../../api_debug.log');
+
+        const logMsg = (msg: string) => {
+            fs.appendFileSync(logFile, new Date().toISOString() + ' ' + msg + '\n');
+        }
+
+        logMsg(`🔍 FETCHING TASKS FOR USER: ${user.email} (${user.role}) ID: ${user.id} Company: ${user.companyId}`);
+        logMsg(`🔍 WHERE CLAUSE: ${JSON.stringify(where)}`);
 
         const tasks = await prisma.task.findMany({
             where,
@@ -243,6 +360,7 @@ export const getTasks = async (req: Request, res: Response) => {
                         scheduleDays: true,
                         startTime: true,
                         endTime: true,
+                        allowOvertime: true,
                         orderIndex: true
                     }
                 }
@@ -250,28 +368,35 @@ export const getTasks = async (req: Request, res: Response) => {
             orderBy: { createdAt: 'desc' }
         });
 
+        logMsg(`✅ FOUND ${tasks.length} TASKS`);
         console.log(`✅ FOUND ${tasks.length} TASKS`);
 
-        // Sign URLs for all tasks
-        const tasksWithSignedUrls = await Promise.all(tasks.map(async (task) => {
-            const signedAttachments = await Promise.all(
-                (task.attachments || []).map((path: string) => getSignedViewUrl(path))
-            );
+        // Sign URLs for tasks in batches of 3 to avoid overwhelming MinIO
+        const TASK_BATCH_SIZE = 3;
+        const tasksWithSignedUrls: any[] = [];
+        for (let i = 0; i < tasks.length; i += TASK_BATCH_SIZE) {
+            const taskBatch = tasks.slice(i, i + TASK_BATCH_SIZE);
+            const signedBatch = await Promise.all(taskBatch.map(async (task) => {
+                const signedAttachments = await Promise.all(
+                    (task.attachments || []).map((path: string) => getSignedViewUrl(path))
+                );
 
-            const signedAssignees = await Promise.all(
-                task.assignees.map(async (a) => ({
-                    ...a,
-                    profileImage: a.profileImage ? await getSignedViewUrl(a.profileImage) : null
-                }))
-            );
+                const signedAssignees = await Promise.all(
+                    task.assignees.map(async (a) => ({
+                        ...a,
+                        profileImage: a.profileImage ? await getSignedViewUrl(a.profileImage) : null
+                    }))
+                );
 
-            return {
-                ...task,
-                attachments: signedAttachments,
-                videoUrl: task.videoUrl ? await getSignedViewUrl(task.videoUrl) : null,
-                assignees: signedAssignees
-            };
-        }));
+                return {
+                    ...task,
+                    attachments: signedAttachments,
+                    videoUrl: task.videoUrl ? await getSignedViewUrl(task.videoUrl) : null,
+                    assignees: signedAssignees
+                };
+            }));
+            tasksWithSignedUrls.push(...signedBatch);
+        }
 
         const isAdmin = user.role === 'OWNER' || user.role === 'ADMIN';
         return res.json({ success: true, tasks: tasksWithSignedUrls, isAdmin, role: user.role });
@@ -291,10 +416,14 @@ export const getTaskById = async (req: Request, res: Response) => {
             include: {
                 assignees: { select: { id: true, name: true, email: true, profileImage: true } },
                 creator: { select: { id: true, name: true, email: true } },
-                timeLogs: true,
+                reviewer: { select: { id: true, name: true, email: true } },
+                timeLogs: {
+                    orderBy: { startTime: 'desc' as const },
+                    take: 50, // Limit to prevent fetching thousands of timelogs into memory
+                },
                 screenshots: {
                     orderBy: { recordedAt: 'desc' },
-                    take: 50 // Limit to recent screenshots
+                    take: 20, // Reduced from 50 — each needs MinIO URL signing
                 },
                 subTasks: {
                     orderBy: { orderIndex: 'asc' },
@@ -310,9 +439,26 @@ export const getTaskById = async (req: Request, res: Response) => {
                         scheduleDays: true,
                         startTime: true,
                         endTime: true,
+                        allowOvertime: true,
                         orderIndex: true
                     }
-                }
+                },
+                dependencies: {
+                    include: { dependsOnTask: { select: { id: true, title: true, status: true } } }
+                },
+                dependedOnBy: {
+                    include: { task: { select: { id: true, title: true, status: true } } }
+                },
+                checklist: { orderBy: { orderIndex: 'asc' } },
+                customFieldValues: {
+                    include: { field: true }
+                },
+                reviewComments: {
+                    include: { user: { select: { id: true, name: true, email: true } } },
+                    orderBy: { createdAt: 'desc' }
+                },
+                parentTask: { select: { id: true, title: true } },
+                childTasks: { select: { id: true, title: true, status: true, recurringIndex: true }, orderBy: { recurringIndex: 'asc' } }
             }
         });
 
@@ -320,28 +466,24 @@ export const getTaskById = async (req: Request, res: Response) => {
             return res.status(404).json({ error: "Task not found" });
         }
 
-        // Sign Screenshot URLs
-        const screenshotsWithSignedUrls = await Promise.all(
-            task.screenshots.map(async (ss: any) => ({
-                ...ss,
-                screenshotPath: await getSignedViewUrl(ss.screenshotPath), // Use stored path to generate signed URL
-                // If frontend expects 'imageUrl', mapping it here:
-                imageUrl: await getSignedViewUrl(ss.screenshotPath)
-            }))
+        // BATCHED URL signing — 5 concurrent max instead of 100+ concurrent
+        // Previously: Promise.all() with 50 screenshots × 2 calls each = 100 concurrent MinIO requests
+        // Now: 5 at a time, single call per screenshot (no duplicate)
+        const screenshotsWithSignedUrls = await batchProcess(task.screenshots, 5, async (ss: any) => {
+            const signedUrl = await safeSignUrl(ss.screenshotPath);
+            return { ...ss, screenshotPath: signedUrl, imageUrl: signedUrl };
+        });
+
+        // Sign Task Attachments & Video — batched (5 at a time)
+        const signedAttachments = await batchProcess(
+            (task.attachments || []) as string[], 5, (p: string) => safeSignUrl(p)
         );
 
-        // Sign Task Attachments & Video
-        const signedAttachments = await Promise.all(
-            (task.attachments || []).map((path: string) => getSignedViewUrl(path))
-        );
-
-        // Sign Assignee Profile Images
-        const signedAssignees = await Promise.all(
-            task.assignees.map(async (a) => ({
-                ...a,
-                profileImage: a.profileImage ? await getSignedViewUrl(a.profileImage) : null
-            }))
-        );
+        // Sign Assignee Profile Images — batched (5 at a time)
+        const signedAssignees = await batchProcess(task.assignees, 5, async (a) => ({
+            ...a,
+            profileImage: await safeSignUrl(a.profileImage)
+        }));
 
         return res.json({
             success: true,
@@ -359,11 +501,11 @@ export const getTaskById = async (req: Request, res: Response) => {
     }
 };
 
-// Update Task (Manager or Freelancer)
-// Update Task (Manager or Freelancer)
+// Update Task (Manager or Freelancer) — with Audit Log + Socket Events
 export const updateTask = async (req: Request, res: Response) => {
     try {
         const { taskId } = req.params;
+        const user = getUser(req);
         const { assigneeIds, subTasks, customFields, ...data } = req.body;
 
         // Sanitize Video URL if present
@@ -376,14 +518,51 @@ export const updateTask = async (req: Request, res: Response) => {
             data.attachments = data.attachments.map((url: string) => extractKey(url)).filter(Boolean);
         }
 
+        // Fetch old task data for audit comparison
+        const oldTask = await prisma.task.findUnique({
+            where: { id: taskId },
+            select: {
+                title: true, description: true, status: true, priority: true,
+                deadline: true, activityThreshold: true, penaltyEnabled: true,
+                penaltyType: true, penaltyThresholdMins: true, companyId: true,
+            },
+        });
+
         // 1. Update Main Task
-        await prisma.task.update({
+        const updatedTask = await prisma.task.update({
             where: { id: taskId },
             data: {
                 ...data,
                 assignees: assigneeIds ? { set: assigneeIds.map((uid: string) => ({ id: uid })) } : undefined
             }
         });
+
+        // Audit log: track field changes
+        if (user?.id && oldTask) {
+            await logFieldChanges({
+                taskId,
+                userId: user.id,
+                oldData: oldTask,
+                newData: data,
+                fields: ['title', 'description', 'status', 'priority', 'deadline',
+                         'activityThreshold', 'penaltyEnabled', 'penaltyType', 'penaltyThresholdMins', 'monitoringMode'],
+            });
+
+            if (assigneeIds) {
+                await logAudit({ taskId, userId: user.id, action: 'ASSIGNED', field: 'assignees', newValue: JSON.stringify(assigneeIds) });
+            }
+        }
+
+        // Socket: broadcast task update to company room
+        const io = req.app.get('io');
+        const companyId = oldTask?.companyId || updatedTask.companyId;
+        if (io && companyId) {
+            io.to(`company:${companyId}`).emit('task:updated', {
+                taskId,
+                changes: Object.keys(data),
+                updatedBy: user?.name || 'Unknown',
+            });
+        }
 
         // 2. Handle SubTasks if provided
         if (subTasks && Array.isArray(subTasks)) {
@@ -423,6 +602,9 @@ export const updateTask = async (req: Request, res: Response) => {
                 }
             }
         }
+
+        // Invalidate earnings cache — task edit (interval, rate, etc.) may affect calculations
+        invalidateEarningsCache(); // Clear all — task edit is rare, safe to clear all
 
         return res.json({ success: true });
     } catch (error: any) {
@@ -465,9 +647,69 @@ export const approveTask = async (req: Request, res: Response) => {
 export const deleteTask = async (req: Request, res: Response) => {
     try {
         const { taskId } = req.params;
+        const user = getUser(req);
+
+        // Audit log before deletion (cascade will remove audit logs too, but we log the intent)
+        if (user?.id) {
+            await logAudit({ taskId, userId: user.id, action: 'DELETED' });
+        }
+
         await prisma.task.delete({ where: { id: taskId } });
         return res.json({ success: true });
     } catch (error) {
         return res.status(500).json({ error: "Failed to delete task" });
+    }
+};
+
+// Toggle Task Active (Pause/Resume)
+export const toggleTaskActive = async (req: Request, res: Response) => {
+    try {
+        const { taskId } = req.params;
+        const user = getUser(req);
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        // Only OWNER, ADMIN, or task creator can toggle
+        if (!['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            return res.status(403).json({ error: 'Only administrators can pause/resume tasks' });
+        }
+
+        const task = await prisma.task.findUnique({ where: { id: taskId } });
+        if (!task) return res.status(404).json({ error: 'Task not found' });
+
+        const newIsActive = !task.isActive;
+        const updatedTask = await prisma.task.update({
+            where: { id: taskId },
+            data: {
+                isActive: newIsActive,
+                pausedAt: newIsActive ? null : new Date(),
+                pausedReason: newIsActive ? null : (req.body.reason || null),
+            }
+        });
+
+        // Audit log
+        await logAudit({
+            taskId,
+            userId: user.id,
+            action: 'STATUS_CHANGED' as any,
+            field: 'isActive',
+            newValue: newIsActive ? 'RESUMED' : 'PAUSED',
+        });
+
+        // Socket.IO notification
+        const io = req.app.get('io');
+        const companyId = task.companyId;
+        if (io && companyId) {
+            io.to(`company:${companyId}`).emit(newIsActive ? 'task:resumed' : 'task:paused', {
+                taskId,
+                isActive: newIsActive,
+                pausedReason: req.body.reason || null,
+                updatedBy: user.name || user.email,
+            });
+        }
+
+        return res.json({ success: true, task: updatedTask });
+    } catch (error) {
+        console.error("Toggle Task Active Error:", error);
+        return res.status(500).json({ error: 'Failed to toggle task status' });
     }
 };

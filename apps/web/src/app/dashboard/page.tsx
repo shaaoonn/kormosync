@@ -5,6 +5,7 @@ import { Users, CheckSquare, ListTodo, HardDrive, X, Clock, Loader2 } from "luci
 import { useState, useEffect, Suspense } from "react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 import EmployeeDashboard from "@/components/dashboard/EmployeeDashboard";
 
 interface DashboardStats {
@@ -196,8 +197,7 @@ function AdminDashboard({ showSuccess, setShowSuccess }: { showSuccess: boolean,
 function DashboardContent() {
     const searchParams = useSearchParams();
     const [showSuccess, setShowSuccess] = useState(false);
-    const [role, setRole] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { user, loading } = useAuth();
 
     useEffect(() => {
         if (searchParams.get("payment") === "success") {
@@ -206,36 +206,11 @@ function DashboardContent() {
         }
     }, [searchParams]);
 
-    useEffect(() => {
-        const fetchRole = async () => {
-            try {
-                const token = await auth.currentUser?.getIdToken();
-                if (token) {
-                    const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/sync`, {}, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    setRole(res.data.user?.role || "EMPLOYEE");
-                }
-            } catch (error) {
-                console.error("Failed to fetch role:", error);
-                setRole("EMPLOYEE");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) fetchRole();
-            else setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
     if (loading) {
         return <div className="p-8 text-center text-gray-500">Loading dashboard...</div>;
     }
 
+    const role = user?.role || "EMPLOYEE";
     const isAdmin = role === "OWNER" || role === "ADMIN";
 
     if (isAdmin) {

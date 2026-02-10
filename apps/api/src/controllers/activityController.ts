@@ -1,8 +1,52 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 import { getSignedViewUrl } from '../utils/minioClient';
+import { checkAndApplyPenalty } from '../services/penaltyService';
+import { calculateActivityScore, calculateDailyProductivity } from '../services/activityScoreService';
+import { updateSessionFromHeartbeat, consumePendingCapture } from '../utils/socketHandler';
 
-const prisma = new PrismaClient();
+// ============================================================
+// Helper: Batch-process async operations to prevent MinIO overload
+// Instead of 200+ concurrent getSignedViewUrl calls, processes N at a time
+// ============================================================
+async function batchProcess<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+    const results: R[] = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map(fn));
+        results.push(...batchResults);
+    }
+    return results;
+}
+
+// Safe URL signing — returns null on failure instead of throwing
+async function safeSignUrl(path: string | null): Promise<string | null> {
+    if (!path) return null;
+    try {
+        return await getSignedViewUrl(path);
+    } catch {
+        return null;
+    }
+}
+
+
+// ============================================================
+// Company Activity Response Cache — prevents DB+MinIO storm
+// Web app calls /activity/company 2x per page load (page.tsx + ActivityTimeline)
+// Without cache: each call = 4 DB queries + 60 MinIO calls = 8+ seconds
+// With cache: second call (and refreshes within 2 min) = 0ms
+// ============================================================
+const companyActivityCache = new Map<string, { data: any; expiresAt: number }>();
+const COMPANY_ACTIVITY_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const MAX_COMPANY_ACTIVITY_CACHE = 50;
+
+// Cleanup every 2 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of companyActivityCache.entries()) {
+        if (now >= entry.expiresAt) companyActivityCache.delete(key);
+    }
+}, 2 * 60 * 1000);
 
 // ============================================================
 // LOG Activity (5-minute interval)
@@ -35,6 +79,12 @@ export const logActivity = async (req: Request, res: Response): Promise<void> =>
                 activeSeconds: activeSeconds || 0
             }
         });
+
+        // Check penalty rules (non-blocking)
+        const io = req.app.get('io');
+        checkAndApplyPenalty(user.id, taskId, io).catch((err) =>
+            console.error('[PENALTY] Background check error:', err)
+        );
 
         res.status(201).json({ success: true, activityLog });
     } catch (error: any) {
@@ -81,7 +131,7 @@ export const getTaskActivity = async (req: Request, res: Response): Promise<void
             }
         });
 
-        // Also fetch screenshots for this task's time range
+        // Also fetch screenshots for this task's time range (limited to prevent MinIO overload)
         const screenshots = await prisma.screenshot.findMany({
             where: {
                 userId: { in: activityLogs.map(a => a.userId) },
@@ -91,19 +141,20 @@ export const getTaskActivity = async (req: Request, res: Response): Promise<void
                 }
             },
             orderBy: { recordedAt: 'desc' },
-            take: 50
+            take: 20
         });
 
-        // Aggregate stats
+        // Enhanced stats with weighted scoring
+        const productivity = calculateDailyProductivity(activityLogs);
         const stats = {
             totalKeystrokes: activityLogs.reduce((sum, a) => sum + a.keystrokes, 0),
             totalMouseClicks: activityLogs.reduce((sum, a) => sum + a.mouseClicks, 0),
             totalMouseMovement: activityLogs.reduce((sum, a) => sum + a.mouseMovement, 0),
             totalActiveSeconds: activityLogs.reduce((sum, a) => sum + a.activeSeconds, 0),
             intervalCount: activityLogs.length,
-            averageActivity: activityLogs.length > 0
-                ? Math.round((activityLogs.reduce((sum, a) => sum + (a.activeSeconds / 300 * 100), 0)) / activityLogs.length)
-                : 0
+            averageActivity: productivity.averageScore,
+            // Enhanced fields
+            ...productivity
         };
 
         res.json({ success: true, activityLogs, screenshots, stats });
@@ -192,14 +243,16 @@ export const getTodayStats = async (req: Request, res: Response): Promise<void> 
             where: {
                 userId: user.id,
                 intervalStart: { gte: today }
-            }
+            },
+            take: 200, // Limit to prevent memory exhaustion on heavy-use days
         });
 
         const timeLogs = await prisma.timeLog.findMany({
             where: {
                 userId: user.id,
                 startTime: { gte: today }
-            }
+            },
+            take: 50, // Limit to prevent memory exhaustion
         });
 
         // Calculate total hours worked today
@@ -246,24 +299,28 @@ export const getCompanyActivity = async (req: Request, res: Response): Promise<v
             return;
         }
 
+        // Check response cache first — identical requests within 2 min get cached result
+        const cacheKey = `${user.companyId}:${startDate}:${endDate}:${userId || 'all'}:${taskId || 'all'}:${limit || '50'}`;
+        const cachedResponse = companyActivityCache.get(cacheKey);
+        if (cachedResponse && Date.now() < cachedResponse.expiresAt) {
+            res.json(cachedResponse.data);
+            return;
+        }
+
         const isManagement = ['OWNER', 'ADMIN', 'MANAGER'].includes(user.role);
-
-        // Get all users in company (Management only needs this for dropdowns/filtering all)
-        // Regular employees will be scoped to themselves
-        const companyUsers = await prisma.user.findMany({
-            where: { companyId: user.companyId },
-            select: { id: true }
-        });
-
-        const userIds = companyUsers.map(u => u.id);
 
         const where: any = {};
 
-        // ROLE BASED SCOPING
+        // ROLE BASED SCOPING — use Prisma relation filter instead of separate query
+        // Previously: fetched ALL company users, then used userId IN (userIds) — now eliminated extra query
         if (isManagement) {
-            // Management: Can see everyone, or filter by specific userId
-            where.userId = { in: userIds };
-            if (userId) where.userId = userId as string;
+            // Management: Can see everyone in company, or filter by specific userId
+            // Use Prisma relation filter — no separate companyUsers query needed
+            if (userId) {
+                where.userId = userId as string;
+            } else {
+                where.user = { companyId: user.companyId };
+            }
         } else {
             // Employee/Freelancer: STRICTLY see only their own data
             where.userId = user.id;
@@ -286,10 +343,12 @@ export const getCompanyActivity = async (req: Request, res: Response): Promise<v
             }
         }
 
+        // OPTIMIZED: Reduced limits + batched URL signing to prevent MinIO overload
+        // Previously: 200 logs + 100 screenshots + 300+ concurrent MinIO calls = API crash
         const activityLogs = await prisma.activityLog.findMany({
             where,
             orderBy: { intervalStart: 'desc' },
-            take: limit ? parseInt(limit as string) : 200,
+            take: Math.min(limit ? parseInt(limit as string) : 50, 50), // Hard cap at 50 — Web app sends limit=200 which is too heavy
             include: {
                 user: {
                     select: { id: true, name: true, email: true, profileImage: true }
@@ -319,48 +378,57 @@ export const getCompanyActivity = async (req: Request, res: Response): Promise<v
         };
 
         if (isManagement) {
-            screenshotWhere.userId = { in: userIds };
-            // If admin selected a specific user, narrow it down
-            if (userId) screenshotWhere.userId = userId as string;
+            // Use Prisma relation filter — same as activityLogs above
+            if (userId) {
+                screenshotWhere.userId = userId as string;
+            } else {
+                screenshotWhere.user = { companyId: user.companyId };
+            }
         } else {
             screenshotWhere.userId = user.id;
         }
 
-        // Get screenshots
+        // Get screenshots — REDUCED from 100 to 30
         const screenshotsRaw = await prisma.screenshot.findMany({
             where: screenshotWhere,
             orderBy: { recordedAt: 'desc' },
-            take: 100,
+            take: 30, // Was 100 → now 30 (reduces MinIO URL signing from 200+ to ~65)
             include: {
                 user: {
                     select: { id: true, name: true, email: true, profileImage: true }
                 },
                 task: {
                     select: { id: true, title: true }
+                },
+                subTask: {
+                    select: { id: true, title: true }
                 }
             }
         });
 
-        // Sign URLs
-        const screenshots = await Promise.all(screenshotsRaw.map(async (ss) => ({
+        // BATCHED URL signing — 5 concurrent max instead of 100+ concurrent
+        // This prevents MinIO connection pool exhaustion and memory spikes
+        const screenshots = await batchProcess(screenshotsRaw, 5, async (ss) => ({
             ...ss,
-            imageUrl: await getSignedViewUrl(ss.screenshotPath),
+            imageUrl: await safeSignUrl(ss.screenshotPath),
             user: {
                 ...ss.user,
-                profileImage: ss.user.profileImage ? await getSignedViewUrl(ss.user.profileImage) : null
-            }
-        })));
+                profileImage: await safeSignUrl(ss.user.profileImage)
+            },
+            subTask: ss.subTask || null,
+            deviceId: ss.deviceId || null,
+        }));
 
-        // Sign Activity Log Profile Images
-        const signedActivityLogs = await Promise.all(activityLogs.map(async (log) => ({
+        // Sign Activity Log Profile Images — batched (5 at a time)
+        const signedActivityLogs = await batchProcess(activityLogs, 5, async (log) => ({
             ...log,
             user: {
                 ...log.user,
-                profileImage: log.user.profileImage ? await getSignedViewUrl(log.user.profileImage) : null
+                profileImage: await safeSignUrl(log.user.profileImage)
             }
-        })));
+        }));
 
-        // NEW: Fetch unique tasks involved to show hierarchy
+        // Fetch unique tasks (WITHOUT assignee profileImage signing — saves 50+ MinIO calls)
         const distinctTaskIds = Array.from(new Set([
             ...activityLogs.map(a => a.taskId),
             ...screenshotsRaw.map(s => s.taskId).filter(Boolean) as string[]
@@ -368,26 +436,84 @@ export const getCompanyActivity = async (req: Request, res: Response): Promise<v
 
         const tasks = await prisma.task.findMany({
             where: { id: { in: distinctTaskIds } },
-            include: {
-                subTasks: true,
-                assignees: {
-                    select: { id: true, name: true, profileImage: true }
-                }
+            select: {
+                id: true,
+                title: true,
+                status: true,
+                subTasks: {
+                    select: { id: true, title: true, status: true }
+                },
             }
         });
 
-        // Sign Assignee Images in Tasks
-        const signedTasks = await Promise.all(tasks.map(async (t) => ({
-            ...t,
-            assignees: await Promise.all(t.assignees.map(async (a) => ({
-                ...a,
-                profileImage: a.profileImage ? await getSignedViewUrl(a.profileImage) : null
-            })))
-        })));
+        const responseData = { success: true, activityLogs: signedActivityLogs, screenshots, tasks };
 
-        res.json({ success: true, activityLogs: signedActivityLogs, screenshots, tasks: signedTasks });
+        // Cache response for 2 minutes — prevents duplicate calls from overwhelming DB
+        if (companyActivityCache.size >= MAX_COMPANY_ACTIVITY_CACHE) {
+            const firstKey = companyActivityCache.keys().next().value;
+            if (firstKey) companyActivityCache.delete(firstKey);
+        }
+        companyActivityCache.set(cacheKey, { data: responseData, expiresAt: Date.now() + COMPANY_ACTIVITY_CACHE_TTL });
+
+        res.json(responseData);
     } catch (error: any) {
         console.error('Get Company Activity Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// ============================================================
+// HEARTBEAT — Real-time current app info (bridge for desktop → socket)
+// ============================================================
+
+export const heartbeat = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const user = (req as any).user;
+
+        if (!user?.id) {
+            res.status(401).json({ success: false, error: 'Authentication required' });
+            return;
+        }
+
+        const { taskId, subTaskId, currentApp, currentWindow, elapsedSeconds, taskTitle } = req.body;
+
+        // Update or auto-create session (Desktop apps register via heartbeat, not Socket.IO)
+        const io = req.app.get('io');
+        const session = updateSessionFromHeartbeat(user.id, {
+            taskId,
+            currentApp,
+            currentWindow,
+            elapsedSeconds,
+            // Extra fields for auto-creating session if first heartbeat
+            companyId: user.companyId,
+            userName: user.dbUser?.name || user.name || user.email,
+            userEmail: user.dbUser?.email || user.email,
+            userImage: user.dbUser?.profileImage || null,
+            taskTitle: taskTitle || undefined,
+        }, io);
+        if (io && user.companyId) {
+            io.to(`company:${user.companyId}`).emit('tracking:tick', {
+                odId: session?.odId || `desktop_${user.id}`,
+                elapsedSeconds: elapsedSeconds || 0,
+                userId: user.id,
+                currentApp: currentApp || '',
+                currentWindow: currentWindow || '',
+            });
+        }
+
+        // Check for pending remote capture requests (desktop polling)
+        const captureRequest = consumePendingCapture(user.id);
+
+        res.json({
+            success: true,
+            ...(captureRequest && {
+                captureNow: true,
+                captureTaskId: captureRequest.taskId,
+                captureRequestedBy: captureRequest.requestedBy,
+            }),
+        });
+    } catch (error: any) {
+        console.error('Heartbeat Error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };

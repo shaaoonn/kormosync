@@ -19,12 +19,10 @@ export default function Home() {
       const user = result.user;
       const token = await user.getIdToken();
 
-      console.log("🔥 Firebase Token:", token);
-
       // Call backend to sync/check user status
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/auth/sync`,
-        {}, // No body for initial check
+        {},
         {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true
@@ -41,7 +39,9 @@ export default function Home() {
 
     } catch (err: any) {
       console.error("Login Failed", err);
-      setError(err.message || "Failed to connect to server");
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setError(err.message || "Failed to connect to server");
+      }
     } finally {
       setLoading(false);
     }

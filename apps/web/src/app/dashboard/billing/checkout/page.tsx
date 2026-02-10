@@ -5,6 +5,7 @@ import { useState, Suspense } from "react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
 import { Loader2, ShieldCheck, CreditCard, TestTube, CheckCircle } from "lucide-react";
+import toast from "react-hot-toast";
 
 const getPlanDetails = (planName: string) => {
     const plans = {
@@ -55,13 +56,13 @@ function CheckoutContent() {
                 if (res.data.bkashURL) {
                     window.location.href = res.data.bkashURL;
                 } else {
-                    alert("Failed to initiate bKash payment");
+                    toast.error("Failed to initiate bKash payment");
                 }
             }
 
         } catch (error) {
             console.error("Payment Error", error);
-            alert("Payment failed. Please try again.");
+            toast.error("Payment failed. Please try again.");
         } finally {
             setLoading(false);
         }

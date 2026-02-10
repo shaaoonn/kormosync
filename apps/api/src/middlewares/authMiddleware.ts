@@ -1,11 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import admin from '../config/firebase';
 
 dotenv.config();
-
-const prisma = new PrismaClient();
 
 // Extended user type for request
 interface ExtendedUser extends admin.auth.DecodedIdToken {
@@ -24,40 +23,80 @@ declare global {
     }
 }
 
+// ============================================================
+// Auth Cache — avoids Firebase verifyIdToken + DB lookup on every request
+// Key: SHA-256 hash of token (first 32 chars for speed)
+// TTL: 5 minutes
+// ============================================================
+interface CachedAuth {
+    user: ExtendedUser;
+    expiresAt: number;
+}
+
+const authCache = new Map<string, CachedAuth>();
+const AUTH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 500; // Prevent unbounded growth
+
+function getTokenHash(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex').substring(0, 32);
+}
+
+// Periodic cache cleanup (every 2 minutes — was 10min, too slow for memory hygiene)
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of authCache.entries()) {
+        if (now >= entry.expiresAt) {
+            authCache.delete(key);
+        }
+    }
+}, 2 * 60 * 1000);
+
 export const authenticateUser = async (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
 
-    // DEBUG LOGS
-    console.log(`[AUTH-DEBUG] Request to: ${req.path}`);
-    console.log(`[AUTH-DEBUG] Auth Header Present: ${!!authHeader}`);
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        console.warn('[AUTH-DEBUG] Missing or invalid Auth header format');
         res.status(401).json({ error: 'Unauthorized: No token provided' });
         return;
     }
 
     const token = authHeader.split('Bearer ')[1];
-    console.log(`[AUTH-DEBUG] Token Length: ${token.length}, Preview: ${token.substring(0, 10)}...`);
+
+    // Quick format check — Firebase JWT tokens are always 3 parts separated by dots
+    // Reject obviously invalid tokens instantly (prevents 30s+ hang in verifyIdToken)
+    if (!token || token.length < 100 || token.split('.').length !== 3) {
+        res.status(401).json({ error: 'Unauthorized: Invalid token format' });
+        return;
+    }
 
     try {
-        // Init check
-        if (!admin.apps.length) {
-            console.error('[AUTH-DEBUG] CRITICAL: Firebase Admin NOT initialized!');
-            throw new Error('Firebase Admin not initialized set up in server.ts');
+        // Check cache first
+        const tokenHash = getTokenHash(token);
+        const cached = authCache.get(tokenHash);
+        if (cached && Date.now() < cached.expiresAt) {
+            req.user = cached.user;
+            return next();
         }
 
-        const decodedToken = await admin.auth().verifyIdToken(token);
-        console.log(`[AUTH-DEBUG] Token Verified for UID: ${decodedToken.uid}`);
+        // Init check
+        if (!admin.apps.length) {
+            console.error('[AUTH] CRITICAL: Firebase Admin NOT initialized!');
+            throw new Error('Firebase Admin not initialized');
+        }
 
-        // Also fetch database user to get companyId
+        // Cache miss — verify token + DB lookup (5s timeout to prevent hanging)
+        const decodedToken = await Promise.race([
+            admin.auth().verifyIdToken(token),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Firebase verifyIdToken timeout (5s)')), 5000)
+            ),
+        ]);
+
         const dbUser = await prisma.user.findUnique({
             where: { firebaseUid: decodedToken.uid },
-            select: { id: true, companyId: true, role: true, email: true, name: true }
+            select: { id: true, companyId: true, role: true, email: true, name: true, profileImage: true }
         });
 
-        // Attach both Firebase and DB user info
-        req.user = {
+        const user: ExtendedUser = {
             ...decodedToken,
             id: dbUser?.id,
             companyId: dbUser?.companyId,
@@ -65,11 +104,33 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
             dbUser: dbUser
         };
 
+        // Populate cache (evict oldest if full)
+        if (authCache.size >= MAX_CACHE_SIZE) {
+            const firstKey = authCache.keys().next().value;
+            if (firstKey) authCache.delete(firstKey);
+        }
+        authCache.set(tokenHash, { user, expiresAt: Date.now() + AUTH_CACHE_TTL });
+
+        req.user = user;
         next();
     } catch (error: any) {
-        console.error('[AUTH-DEBUG] Auth Verification Failed:', error);
-        console.error('[AUTH-DEBUG] Error Code:', error.code);
-        console.error('[AUTH-DEBUG] Error Message:', error.message);
+        // Invalidate cache on error
+        const tokenHash = getTokenHash(token);
+        authCache.delete(tokenHash);
+
+        // Distinguish Database Errors from Auth Errors
+        if ((error.code && error.code.startsWith('P')) ||
+            (error.message && error.message.includes("Can't reach database server")) ||
+            (error.message && error.message.includes("PrismaClientInitializationError"))) {
+
+            console.error('[AUTH] Database Error:', error.message);
+            res.status(503).json({
+                error: 'Service Unavailable: Database Connection Failed',
+                details: 'The server cannot reach the database. Please try again later.',
+                debugCode: error.code || 'DB_CONNECTION_ERROR'
+            });
+            return;
+        }
 
         res.status(401).json({
             error: 'Unauthorized: Invalid token',

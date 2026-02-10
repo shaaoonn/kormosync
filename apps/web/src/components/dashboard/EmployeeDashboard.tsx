@@ -1,14 +1,46 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Clock, CheckSquare, DollarSign, Monitor } from "lucide-react";
+import { Download, Clock, CheckSquare, DollarSign, Monitor, CalendarDays, Briefcase, TrendingUp } from "lucide-react";
 import axios from "axios";
-import { auth } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
+import Link from "next/link";
 
 interface Stats {
     pendingTasks: number;
     hoursWorked: number;
     earnings: number;
+    currency: string;
+}
+
+interface CurrentEarnings {
+    periodStart: string;
+    periodEnd: string;
+    workedHours: number;
+    workedAmount: number;
+    paidLeaveDays: number;
+    leaveHours: number;
+    leavePay: number;
+    overtimeHours: number;
+    overtimePay: number;
+    overtimeRate: number;
+    penaltyAmount: number;
+    salaryType: string;
+    monthlySalary: number;
+    workedDays: number;
+    totalWorkingDays: number;
+    grossAmount: number;
+    netAmount: number;
+    currency: string;
+}
+
+interface LeaveBalanceData {
+    paidLeave: number;
+    sickLeave: number;
+    paidUsed: number;
+    sickUsed: number;
+    paidRemaining: number;
+    sickRemaining: number;
 }
 
 interface Screenshot {
@@ -18,32 +50,54 @@ interface Screenshot {
 }
 
 export default function EmployeeDashboard() {
-    const [stats, setStats] = useState<Stats>({ pendingTasks: 0, hoursWorked: 0, earnings: 0 });
+    const { user, token, loading: authLoading } = useAuth();
+    const [stats, setStats] = useState<Stats>({ pendingTasks: 0, hoursWorked: 0, earnings: 0, currency: 'BDT' });
+    const [currentEarnings, setCurrentEarnings] = useState<CurrentEarnings | null>(null);
+    const [leaveBalance, setLeaveBalance] = useState<LeaveBalanceData | null>(null);
     const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
     const [loading, setLoading] = useState(true);
-    const [userName, setUserName] = useState("Employee");
+
+    // Use name from AuthContext — no duplicate /auth/sync call
+    const userName = user?.name || "Employee";
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
     useEffect(() => {
+        if (authLoading || !token) return;
+
         const fetchData = async () => {
             try {
-                const token = await auth.currentUser?.getIdToken();
+                // Fetch all data in parallel
+                const [statsRes, earningsRes, leaveRes] = await Promise.all([
+                    axios.get(`${API_URL}/dashboard/employee-stats`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }),
+                    axios.get(`${API_URL}/payroll/current-earnings`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }).catch(() => null),
+                    axios.get(`${API_URL}/leave/my-balance`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }).catch(() => null),
+                ]);
 
-                // Fetch user info
-                const userRes = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/sync`, {}, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setUserName(userRes.data.user?.name || "Employee");
+                if (statsRes.data.success) {
+                    const s = statsRes.data.stats;
+                    setStats({
+                        pendingTasks: s.pendingTasks,
+                        hoursWorked: s.hoursThisMonth,
+                        earnings: s.earningsThisMonth,
+                        currency: s.currency || 'BDT',
+                    });
+                }
 
-                // For now, using placeholder data
-                // TODO: Create backend endpoints for employee stats
-                setStats({
-                    pendingTasks: 3,
-                    hoursWorked: 42.5,
-                    earnings: 5200
-                });
+                if (earningsRes?.data?.success) {
+                    setCurrentEarnings(earningsRes.data.earnings);
+                }
+
+                if (leaveRes?.data?.success) {
+                    setLeaveBalance(leaveRes.data.balance);
+                }
 
                 setScreenshots([]);
-
             } catch (error) {
                 console.error("Failed to fetch employee data", error);
             } finally {
@@ -51,11 +105,23 @@ export default function EmployeeDashboard() {
             }
         };
 
-        auth.onAuthStateChanged((user) => {
-            if (user) fetchData();
-            else setLoading(false);
-        });
-    }, []);
+        fetchData();
+    }, [token, authLoading]);
+
+    // Auto-refresh earnings every 2 minutes (reflects real-time tracking)
+    useEffect(() => {
+        if (!token || authLoading) return;
+        const interval = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                axios.get(`${API_URL}/payroll/current-earnings`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }).then(res => {
+                    if (res?.data?.success) setCurrentEarnings(res.data.earnings);
+                }).catch(() => {});
+            }
+        }, 120000); // 2 minutes
+        return () => clearInterval(interval);
+    }, [token, authLoading]);
 
     if (loading) {
         return <div className="p-8 text-center text-gray-500">Loading...</div>;
@@ -66,8 +132,60 @@ export default function EmployeeDashboard() {
             {/* Welcome Header */}
             <div>
                 <h1 className="text-2xl font-bold text-gray-800">Welcome, {userName}!</h1>
-                <p className="text-gray-500">Here's your work summary</p>
+                <p className="text-gray-500">Here&apos;s your work summary</p>
             </div>
+
+            {/* Real-Time Earnings Card */}
+            {currentEarnings && (
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/4" />
+                    <div className="relative z-10">
+                        <p className="text-sm text-green-100 mb-1 flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4" />
+                            Since last pay period
+                        </p>
+                        <p className="text-4xl font-bold mb-3">
+                            {currentEarnings.currency === 'BDT' ? '৳' : '$'}
+                            {currentEarnings.netAmount?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                        </p>
+                        <div className="flex gap-4 text-sm text-green-100 flex-wrap">
+                            <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                {(currentEarnings.workedHours || 0).toFixed(1)}h worked
+                            </span>
+                            {currentEarnings.paidLeaveDays > 0 && (
+                                <span className="flex items-center gap-1">
+                                    <CalendarDays className="w-3.5 h-3.5" />
+                                    {currentEarnings.paidLeaveDays}d leave
+                                </span>
+                            )}
+                            {currentEarnings.overtimeHours > 0 && (
+                                <span className="flex items-center gap-1">
+                                    <Briefcase className="w-3.5 h-3.5" />
+                                    {currentEarnings.overtimeHours.toFixed(1)}h overtime
+                                </span>
+                            )}
+                            {currentEarnings.penaltyAmount > 0 && (
+                                <span className="text-red-200">
+                                    -{currentEarnings.currency === 'BDT' ? '৳' : '$'}{currentEarnings.penaltyAmount.toLocaleString()} penalty
+                                </span>
+                            )}
+                        </div>
+                        {leaveBalance && (
+                            <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/20">
+                                <div className="flex gap-4 text-sm text-green-100">
+                                    <span>Paid leave: {leaveBalance.paidRemaining ?? (leaveBalance.paidLeave - leaveBalance.paidUsed)}d left</span>
+                                    <span>Sick: {leaveBalance.sickRemaining ?? (leaveBalance.sickLeave - leaveBalance.sickUsed)}d left</span>
+                                </div>
+                                <Link href="/dashboard/leave"
+                                    className="px-3 py-1.5 bg-white/20 border border-white/30 rounded-full text-xs font-semibold hover:bg-white/30 transition">
+                                    Request Leave
+                                </Link>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Download Desktop App Card */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
@@ -127,7 +245,7 @@ export default function EmployeeDashboard() {
                         </div>
                         <div>
                             <p className="text-sm text-gray-500">My Earnings</p>
-                            <p className="text-2xl font-bold text-gray-800">{stats.earnings.toLocaleString()} BDT</p>
+                            <p className="text-2xl font-bold text-gray-800">{stats.earnings.toLocaleString()} {stats.currency}</p>
                         </div>
                     </div>
                 </div>

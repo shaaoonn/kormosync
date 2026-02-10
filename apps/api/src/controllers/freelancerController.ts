@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 
-const prisma = new PrismaClient();
 
 // Toggle Public Profile Visibility
 export const togglePublicProfile = async (req: Request, res: Response) => {

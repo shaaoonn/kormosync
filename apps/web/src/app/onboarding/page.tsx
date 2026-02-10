@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { User } from "firebase/auth";
 import { Building2, UserCircle, Users } from "lucide-react";
+import toast from "react-hot-toast";
 
 function OnboardingContent() {
     const router = useRouter();
@@ -69,7 +70,7 @@ function OnboardingContent() {
             );
 
             if (!syncResponse.data.success) {
-                alert("সাইনআপ সম্পন্ন করতে ব্যর্থ");
+                toast.error("সাইনআপ সম্পন্ন করতে ব্যর্থ");
                 return;
             }
 
@@ -95,7 +96,7 @@ function OnboardingContent() {
 
         } catch (error) {
             console.error("Onboarding Error", error);
-            alert("কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+            toast.error("কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।");
         } finally {
             setSubmitting(false);
         }

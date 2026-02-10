@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { User, Mail, Phone, Briefcase, MapPin, Globe, Linkedin, Save, Plus, X, Camera, Facebook, Youtube, Github, Twitter, Users, Edit, Download, GraduationCap, Calendar as CalendarIcon } from "lucide-react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
+import toast from "react-hot-toast";
 
 interface Education {
     degree: string;
@@ -111,7 +112,7 @@ export default function ProfilePage() {
             );
             setIsPublic(res.data.isPublic);
         } catch (error) {
-            alert("Failed to update visibility");
+            toast.error("Failed to update visibility");
         }
     };
 
@@ -160,7 +161,7 @@ export default function ProfilePage() {
 
             setProfileImage(res.data.url);
         } catch (error) {
-            alert("Failed to upload image");
+            toast.error("Failed to upload image");
         } finally {
             setUploading(false);
         }
@@ -178,9 +179,9 @@ export default function ProfilePage() {
             setProfile(res.data.profile);
             window.dispatchEvent(new Event('profile-updated'));
             setIsEditMode(false);
-            alert("Profile saved!");
+            toast.success("Profile saved!");
         } catch (error) {
-            alert("Failed to save profile");
+            toast.error("Failed to save profile");
         } finally {
             setSaving(false);
         }

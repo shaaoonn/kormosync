@@ -2,8 +2,7 @@
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { auth } from "@/lib/firebase";
+import api from "@/lib/api";
 
 export default function Home() {
   const [stats, setStats] = useState({
@@ -16,13 +15,8 @@ export default function Home() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        if (auth.currentUser) {
-          const token = await auth.currentUser.getIdToken();
-          const response = await axios.get('http://localhost:8000/api/admin/stats', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          setStats(response.data);
-        }
+        const response = await api.get('/admin/stats');
+        setStats(response.data);
       } catch (error) {
         console.error("Failed to fetch stats", error);
       } finally {
@@ -30,12 +24,7 @@ export default function Home() {
       }
     };
 
-    // Wait for auth to be ready
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) fetchStats();
-    });
-
-    return () => unsubscribe();
+    fetchStats();
   }, []);
 
   return (

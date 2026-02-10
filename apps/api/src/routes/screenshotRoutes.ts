@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { authenticateUser } from '../middlewares/authMiddleware';
-import { uploadScreenshot, getScreenshots, getScreenshotById } from '../controllers/screenshotController';
+import { uploadScreenshot, getScreenshots, getScreenshotById, deleteScreenshot, bulkDeleteScreenshots } from '../controllers/screenshotController';
 
 const router = express.Router();
 
@@ -26,5 +26,11 @@ router.get('/list', authenticateUser, getScreenshots);
 
 // Get single screenshot by ID
 router.get('/:screenshotId', authenticateUser, getScreenshotById);
+
+// Delete single screenshot (Admin only)
+router.delete('/:screenshotId', authenticateUser, deleteScreenshot);
+
+// Bulk delete screenshots (Admin only)
+router.post('/bulk-delete', authenticateUser, bulkDeleteScreenshots);
 
 export default router;

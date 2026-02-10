@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, X, Video, StopCircle, CheckCircle, Save, Plus, AlertTriangle, Trash2, GripVertical, Users, User, Layers, FileText, ChevronUp, ChevronDown, ArrowLeft } from "lucide-react";
+import { Upload, X, Video, StopCircle, CheckCircle, Save, Plus, AlertTriangle, Trash2, GripVertical, Users, User, Layers, FileText, ChevronUp, ChevronDown, ArrowLeft, Repeat, DollarSign, UserCheck } from "lucide-react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
+import toast from "react-hot-toast";
 
 // ============================================================
 // Task Item Interface
@@ -146,7 +147,25 @@ export default function EditTaskPage() {
     const [singleScheduleDays, setSingleScheduleDays] = useState<number[]>([]);
     const [singleStartTime, setSingleStartTime] = useState("");
     const [singleEndTime, setSingleEndTime] = useState("");
+    const [singleAllowOvertime, setSingleAllowOvertime] = useState(false);
     const [screenshotInterval, setScreenshotInterval] = useState(5);
+
+    // Phase 9: Recurring, Budget, Reviewer
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [recurringType, setRecurringType] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('DAILY');
+    const [recurringEndDate, setRecurringEndDate] = useState('');
+    const [recurringCount, setRecurringCount] = useState<number | undefined>();
+    const [maxBudget, setMaxBudget] = useState<number | undefined>();
+    const [reviewerId, setReviewerId] = useState('');
+
+    // Advanced Settings
+    const [monitoringMode, setMonitoringMode] = useState<'TRANSPARENT' | 'STEALTH'>('TRANSPARENT');
+    const [activityThreshold, setActivityThreshold] = useState(40);
+    const [penaltyEnabled, setPenaltyEnabled] = useState(false);
+    const [penaltyType, setPenaltyType] = useState('');
+    const [penaltyThresholdMins, setPenaltyThresholdMins] = useState(15);
+    const [resourceLinks, setResourceLinks] = useState<string[]>(['']);
+    const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Task Items (Bundle)
     const [taskItems, setTaskItems] = useState<TaskItem[]>([]);
@@ -199,6 +218,12 @@ export default function EditTaskPage() {
                 setAttachments(task.attachments || []);
                 setVideoUrl(task.videoUrl || null);
                 setScreenshotInterval(task.screenshotInterval || 5);
+                setMonitoringMode(task.monitoringMode || 'TRANSPARENT');
+                setActivityThreshold(task.activityThreshold ?? 40);
+                setPenaltyEnabled(!!task.penaltyEnabled);
+                setPenaltyType(task.penaltyType || '');
+                setPenaltyThresholdMins(task.penaltyThresholdMins || 15);
+                setResourceLinks(task.resourceLinks?.length > 0 ? task.resourceLinks : ['']);
                 setWorkerType(task.freelancerEmail ? 'FREELANCER' : 'EMPLOYEE');
                 if (task.freelancerEmail) setFreelancerEmail(task.freelancerEmail);
 
@@ -220,7 +245,16 @@ export default function EditTaskPage() {
                     setSingleScheduleDays(task.scheduleDays || []);
                     setSingleStartTime(task.startTime || "");
                     setSingleEndTime(task.endTime || "");
+                    setSingleAllowOvertime(!!task.allowOvertime);
                 }
+
+                // Phase 9: Recurring, Budget, Reviewer
+                setIsRecurring(!!task.isRecurring);
+                setRecurringType(task.recurringType || 'DAILY');
+                setRecurringEndDate(task.recurringEndDate ? task.recurringEndDate.split('T')[0] : '');
+                setRecurringCount(task.recurringCount || undefined);
+                setMaxBudget(task.maxBudget || undefined);
+                setReviewerId(task.reviewerId || '');
 
             } catch (error) {
                 console.error("Failed to fetch task", error);
@@ -239,7 +273,7 @@ export default function EditTaskPage() {
 
     // Task Item Logic
     const addTaskItem = () => {
-        if (taskItems.length >= 10) { alert("সর্বোচ্চ ১০টা টাস্ক যুক্ত করা যাবে!"); return; }
+        if (taskItems.length >= 10) { toast.error("সর্বোচ্চ ১০টা টাস্ক যুক্ত করা যাবে!"); return; }
         const newItem: TaskItem = {
             id: `ti-${Date.now()}`,
             title: "", description: "", billingType: "HOURLY", scheduleDays: [], forceSchedule: false
@@ -313,25 +347,25 @@ export default function EditTaskPage() {
     const handleMainFileUpload = async (files: FileList | null) => {
         if (!files) return;
         const file = files[0];
-        if (file.size > MAX_MAIN_FILE_SIZE) { alert("File > 100MB!"); return; }
+        if (file.size > MAX_MAIN_FILE_SIZE) { toast.error("File > 100MB!"); return; }
         const formData = new FormData(); formData.append("file", file);
         try {
             const token = await auth.currentUser?.getIdToken();
             const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/upload`, formData, { headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` } });
             setAttachments(prev => [...prev, res.data.url]);
-        } catch (e) { alert("Upload failed"); }
+        } catch (e) { toast.error("Upload failed"); }
     };
     const handleTaskFileUpload = async (files: FileList | null, tId: string) => {
         if (!files) return;
         const file = files[0];
-        if (file.size > MAX_SUBTASK_FILE_SIZE) { alert("Subtask File > 20MB!"); return; }
+        if (file.size > MAX_SUBTASK_FILE_SIZE) { toast.error("Subtask File > 20MB!"); return; }
         setUploadingTaskId(tId);
         const formData = new FormData(); formData.append("file", file);
         try {
             const token = await auth.currentUser?.getIdToken();
             const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/upload`, formData, { headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` } });
             updateTaskItem(tId, 'attachment', res.data.url);
-        } catch (e) { alert("Upload failed"); } finally { setUploadingTaskId(null); }
+        } catch (e) { toast.error("Upload failed"); } finally { setUploadingTaskId(null); }
     };
 
     // Recording
@@ -352,14 +386,14 @@ export default function EditTaskPage() {
             mediaRecorderRef.current = recorder;
             setIsRecording(true);
             timerRef.current = setInterval(() => { setRecordingTime(prev => { if (prev >= 300) { stopRecording(); return prev; } return prev + 1; }); }, 1000);
-        } catch (e) { alert("Recording failed"); }
+        } catch (e) { toast.error("Recording failed"); }
     };
     const stopRecording = () => { mediaRecorderRef.current?.stop(); setIsRecording(false); if (timerRef.current) clearInterval(timerRef.current); };
     const formatRecordTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
     // Update
-    const handleUpdate = async () => {
-        if (!title.trim()) { alert("Please enter title"); return; }
+    const handleUpdate = async (publishStatus: 'DRAFT' | 'PUBLISHED' = 'PUBLISHED') => {
+        if (!title.trim()) { toast.error("Please enter title"); return; }
         setSaving(true);
         try {
             let finalVideoUrl = videoUrl;
@@ -373,12 +407,26 @@ export default function EditTaskPage() {
 
             const token = await auth.currentUser?.getIdToken();
             const payload: any = {
-                title, priority, deadline: deadline ? new Date(deadline).toISOString() : null, // Ensure Date format
+                title, priority, deadline: deadline ? new Date(deadline).toISOString() : null,
                 descriptionRaw: description,
                 attachments, videoUrl: finalVideoUrl,
                 manualAllowedApps: requiredAppsStr.split(',').map(s => s.trim()).filter(Boolean),
                 screenshotInterval,
-                publishStatus: 'PUBLISHED' // Fixed: status -> publishStatus
+                publishStatus,
+                // Advanced Settings
+                monitoringMode,
+                activityThreshold,
+                penaltyEnabled,
+                penaltyType: penaltyEnabled ? penaltyType : null,
+                penaltyThresholdMins: penaltyEnabled ? penaltyThresholdMins : 15,
+                resourceLinks: resourceLinks.filter(l => l.trim()),
+                // Phase 9: Recurring, Budget, Reviewer
+                isRecurring,
+                recurringType: isRecurring ? recurringType : null,
+                recurringEndDate: isRecurring && recurringEndDate ? recurringEndDate : null,
+                recurringCount: isRecurring && recurringCount ? recurringCount : null,
+                maxBudget: maxBudget || null,
+                reviewerId: reviewerId || null,
             };
 
             if (taskType === 'BUNDLE') {
@@ -399,21 +447,22 @@ export default function EditTaskPage() {
                 payload.scheduleDays = singleScheduleDays;
                 payload.startTime = singleStartTime;
                 payload.endTime = singleEndTime;
+                payload.allowOvertime = singleBillingType === 'SCHEDULED' ? singleAllowOvertime : false;
             }
 
             // Assignees
             payload.assigneeIds = selectedAssignees;
 
             await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/tasks/${taskId}`, payload, { headers: { Authorization: `Bearer ${token}` } });
-            alert("Task Updated!");
+            toast.success(publishStatus === 'DRAFT' ? "Saved as Draft!" : "Task Published!");
             router.push(`/dashboard/tasks/${taskId}`);
         } catch (error: any) {
             console.error(error);
-            alert(error.response?.data?.error || "Update failed");
+            toast.error(error.response?.data?.error || "Update failed");
         } finally { setSaving(false); }
     };
 
-    const renderBillingFields = (billingType: string, onBillingChange: any, fixedPrice: any, onFixedChange: any, hourlyRate: any, onHourlyChange: any, estimatedHours: any, onEstimatedChange: any, scheduleDays: any, onDayToggle: any, startTime: any, onStartChange: any, endTime: any, onEndChange: any) => (
+    const renderBillingFields = (billingType: string, onBillingChange: (v: string) => void, fixedPrice: number | undefined, onFixedChange: (v: number) => void, hourlyRate: number | undefined, onHourlyChange: (v: number) => void, estimatedHours: number | undefined, onEstimatedChange: (v: number) => void, scheduleDays: number[], onDayToggle: (d: number) => void, startTime: string, onStartChange: (v: string) => void, endTime: string, onEndChange: (v: string) => void) => (
         <div className="space-y-4 p-4 bg-gray-50 rounded-lg border">
             <div>
                 <label className="text-xs text-gray-500 block mb-2">Billing Type</label>
@@ -518,10 +567,108 @@ export default function EditTaskPage() {
                     <textarea rows={4} className="mt-1 w-full p-3 border rounded-lg" value={description} onChange={e => setDescription(e.target.value)} />
                 </div>
 
+                {/* Advanced Settings */}
+                <div className="border-t pt-4">
+                    <button type="button" onClick={() => setShowAdvanced(!showAdvanced)}
+                        className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-indigo-600 transition-colors">
+                        {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        Advanced Settings
+                    </button>
+
+                    {showAdvanced && (
+                        <div className="mt-4 p-5 bg-gray-50 rounded-xl border space-y-5">
+                            {/* Monitoring Mode */}
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-2">Monitoring Mode</label>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => setMonitoringMode('TRANSPARENT')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${monitoringMode === 'TRANSPARENT' ? 'bg-green-600 text-white' : 'bg-white border text-gray-600 hover:bg-gray-100'}`}>
+                                        Transparent
+                                    </button>
+                                    <button type="button" onClick={() => setMonitoringMode('STEALTH')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${monitoringMode === 'STEALTH' ? 'bg-red-600 text-white' : 'bg-white border text-gray-600 hover:bg-gray-100'}`}>
+                                        Stealth
+                                    </button>
+                                </div>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    {monitoringMode === 'STEALTH' ? 'Employee will not see tracking notifications or widget' : 'Employee can see tracking status and notifications'}
+                                </p>
+                            </div>
+
+                            {/* Activity Threshold */}
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Activity Threshold: {activityThreshold}%</label>
+                                <input type="range" min={0} max={100} value={activityThreshold}
+                                    onChange={e => setActivityThreshold(parseInt(e.target.value))}
+                                    className="w-full accent-indigo-600" />
+                                <div className="flex justify-between text-[10px] text-gray-400">
+                                    <span>0%</span><span>50%</span><span>100%</span>
+                                </div>
+                            </div>
+
+                            {/* Penalty Settings */}
+                            <div className="space-y-3">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={penaltyEnabled}
+                                        onChange={e => setPenaltyEnabled(e.target.checked)}
+                                        className="rounded text-indigo-600" />
+                                    <span className="text-sm text-gray-700 font-medium">Enable Penalty</span>
+                                </label>
+                                {penaltyEnabled && (
+                                    <div className="grid grid-cols-2 gap-4 pl-6">
+                                        <div>
+                                            <label className="text-xs text-gray-500 block mb-1">Penalty Type</label>
+                                            <select className="w-full p-2 border rounded-lg text-sm" value={penaltyType}
+                                                onChange={e => setPenaltyType(e.target.value)}>
+                                                <option value="">Select...</option>
+                                                <option value="DEDUCT_TIME">Deduct Time</option>
+                                                <option value="NOTIFY_ADMIN">Notify Admin</option>
+                                                <option value="PAUSE_TIMER">Pause Timer</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-500 block mb-1">Threshold (mins)</label>
+                                            <input type="number" min={1} max={120} value={penaltyThresholdMins}
+                                                onChange={e => setPenaltyThresholdMins(parseInt(e.target.value) || 15)}
+                                                className="w-full p-2 border rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Resource Links */}
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Resource Links</label>
+                                <div className="space-y-2">
+                                    {resourceLinks.map((link, idx) => (
+                                        <div key={idx} className="flex gap-2">
+                                            <input type="url" placeholder="https://..."
+                                                className="flex-1 p-2 border rounded-lg text-sm"
+                                                value={link} onChange={e => {
+                                                    const updated = [...resourceLinks];
+                                                    updated[idx] = e.target.value;
+                                                    setResourceLinks(updated);
+                                                }} />
+                                            {resourceLinks.length > 1 && (
+                                                <button type="button" onClick={() => setResourceLinks(resourceLinks.filter((_, i) => i !== idx))}
+                                                    className="text-red-500 hover:bg-red-50 p-2 rounded"><X className="w-4 h-4" /></button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    <button type="button" onClick={() => setResourceLinks([...resourceLinks, ''])}
+                                        className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                                        <Plus className="w-3 h-3" /> Add Link
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {taskType === 'SINGLE' && (
                     <div className="border-t pt-6">
                         <h2 className="text-lg font-bold text-gray-800 mb-4">💰 Billing & Schedule</h2>
-                        {renderBillingFields(singleBillingType, setSingleBillingType, singleFixedPrice, setSingleFixedPrice, singleHourlyRate, setSingleHourlyRate, singleEstimatedHours, setSingleEstimatedHours, singleScheduleDays, toggleSingleScheduleDay, singleStartTime, setSingleStartTime, singleEndTime, setSingleEndTime)}
+                        {renderBillingFields(singleBillingType, (v) => setSingleBillingType(v as any), singleFixedPrice, setSingleFixedPrice, singleHourlyRate, setSingleHourlyRate, singleEstimatedHours, setSingleEstimatedHours, singleScheduleDays, toggleSingleScheduleDay, singleStartTime, setSingleStartTime, singleEndTime, setSingleEndTime)}
                     </div>
                 )}
 
@@ -556,6 +703,60 @@ export default function EditTaskPage() {
                     <div className="text-xs text-gray-500">{attachments.map((a, i) => <div key={i}>{a}</div>)}</div>
                 </div>
 
+                {/* 🔄 Recurring Section */}
+                <div className="border-t pt-6">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)}
+                            className="w-4 h-4 text-indigo-600 rounded" />
+                        <span className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                            <Repeat className="w-4 h-4 text-indigo-600" /> পুনরাবৃত্তি টাস্ক
+                        </span>
+                    </label>
+                    {isRecurring && (
+                        <div className="mt-3 ml-7 p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-3">
+                            <div className="flex gap-2">
+                                {(['DAILY', 'WEEKLY', 'MONTHLY'] as const).map(t => (
+                                    <button key={t} type="button" onClick={() => setRecurringType(t)}
+                                        className={`px-3 py-1.5 rounded text-sm ${recurringType === t ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>
+                                        {t === 'DAILY' ? 'প্রতিদিন' : t === 'WEEKLY' ? 'সাপ্তাহিক' : 'মাসিক'}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs text-gray-500">শেষ তারিখ</label>
+                                    <input type="date" className="w-full p-2 border rounded text-sm" value={recurringEndDate} onChange={e => setRecurringEndDate(e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500">সর্বোচ্চ সংখ্যা</label>
+                                    <input type="number" className="w-full p-2 border rounded text-sm" value={recurringCount || ''} onChange={e => setRecurringCount(parseInt(e.target.value) || undefined)} min={1} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 💰 Budget */}
+                <div className="border-t pt-6">
+                    <h2 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-green-600" /> বাজেট সীমা
+                    </h2>
+                    <input type="number" placeholder="সর্বোচ্চ বাজেট (৳)" className="max-w-xs p-2 border rounded-lg" value={maxBudget || ''} onChange={e => setMaxBudget(parseFloat(e.target.value) || undefined)} min={0} />
+                </div>
+
+                {/* 👤 Reviewer */}
+                {employees.length > 0 && (
+                    <div className="border-t pt-6">
+                        <h2 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
+                            <UserCheck className="w-4 h-4 text-purple-600" /> রিভিউয়ার
+                        </h2>
+                        <select className="max-w-sm p-2 border rounded-lg text-sm" value={reviewerId} onChange={e => setReviewerId(e.target.value)}>
+                            <option value="">কোনো রিভিউয়ার নেই</option>
+                            {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name || emp.email}</option>)}
+                        </select>
+                    </div>
+                )}
+
                 {workerType === 'EMPLOYEE' && (
                     <div className="border-t pt-6">
                         <label className="block mb-2">Assign Employees</label>
@@ -567,8 +768,15 @@ export default function EditTaskPage() {
                     </div>
                 )}
 
-                <div className="pt-6 border-t flex justify-end">
-                    <button onClick={handleUpdate} disabled={saving} className="px-6 py-2 bg-indigo-600 text-white rounded font-bold">{saving ? 'Updating...' : 'Update Task'}</button>
+                <div className="pt-6 border-t flex justify-end gap-4">
+                    <button onClick={() => handleUpdate('DRAFT')} disabled={saving}
+                        className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2">
+                        <Save className="w-4 h-4" /> Save as Draft
+                    </button>
+                    <button onClick={() => handleUpdate('PUBLISHED')} disabled={saving}
+                        className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2 shadow-md">
+                        {saving ? 'Saving...' : 'Save & Publish'}
+                    </button>
                 </div>
             </div>
         </div>

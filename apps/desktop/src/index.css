@@ -1,5 +1,5 @@
 /* KormoSync Desktop - Premium Design System */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Hind+Siliguri:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&display=swap');
 
 :root {
   /* Brand Colors */
@@ -48,24 +48,34 @@
 }
 
 /* Reset & Base */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+* {
   margin: 0;
   padding: 0;
+  box-sizing: border-box;
+}
+
+body,
+html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #0f172a;
 }
 
 body {
-  background: linear-gradient(135deg, var(--color-bg-deep) 0%, var(--color-bg-primary) 50%, var(--color-bg-secondary) 100%);
-  color: var(--color-text-primary);
-  min-height: 100vh;
-  overflow: hidden;
+  font-family: 'Inter', 'Hind Siliguri', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   width: 100%;
-  height: 100vh;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Scrollbar Styling */
@@ -381,7 +391,7 @@ h3 {
 }
 
 .h-screen {
-  height: 100vh;
+  height: 100%;
 }
 
 .overflow-hidden {
@@ -671,8 +681,8 @@ h3 {
 
 .app-container {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   background-color: var(--color-bg-deep);
   color: var(--color-text-primary);
   font-family: 'Inter', sans-serif;

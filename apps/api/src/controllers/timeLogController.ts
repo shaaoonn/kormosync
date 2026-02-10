@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 import { uploadToMinio, getSignedViewUrl } from '../utils/minioClient'; // Reuse MinIO client
 import { v4 as uuidv4 } from 'uuid';
 
-const prisma = new PrismaClient();
 
 /**
  * Upload Time Log (Snapshot with Activity Data)
@@ -83,7 +82,7 @@ export const getTimeLogs = async (req: Request, res: Response) => {
         const { date, taskId, employeeId } = req.query;
 
         // Verify Requestor Company
-        const requestor = await prisma.user.findUnique({ where: { id: userId } });
+        const requestor = await prisma.user.findUnique({ where: { firebaseUid: userId } });
         if (!requestor?.companyId) return res.status(403).json({ success: false, message: 'No company access' });
 
         const where: any = {
@@ -100,22 +99,28 @@ export const getTimeLogs = async (req: Request, res: Response) => {
         if (taskId) where.taskId = taskId as string;
         if (employeeId) where.userId = employeeId as string;
 
-        // Fetch Logs
+        // Fetch Logs (limited to 50 — reduces signed URL generation time 4x)
         const logs = await prisma.screenshot.findMany({
             where,
             orderBy: { recordedAt: 'desc' },
-            take: 200 // Limit
+            take: 50
         });
 
-        // Loop and Sign URLs
-        const logsWithSignedUrls = await Promise.all(logs.map(async (log) => ({
-            id: log.id,
-            url: await getSignedViewUrl(log.screenshotPath), // Generate fresh signed URL
-            activityScore: log.activityScore,
-            recordedAt: log.recordedAt,
-            keyboardCount: log.keyboardCount,
-            mouseCount: log.mouseCount
-        })));
+        // Sign URLs in batches of 5 to avoid overwhelming MinIO server
+        const BATCH_SIZE = 5;
+        const logsWithSignedUrls: any[] = [];
+        for (let i = 0; i < logs.length; i += BATCH_SIZE) {
+            const batch = logs.slice(i, i + BATCH_SIZE);
+            const signed = await Promise.all(batch.map(async (log) => ({
+                id: log.id,
+                url: await getSignedViewUrl(log.screenshotPath),
+                activityScore: log.activityScore,
+                recordedAt: log.recordedAt,
+                keyboardCount: log.keyboardCount,
+                mouseCount: log.mouseCount
+            })));
+            logsWithSignedUrls.push(...signed);
+        }
 
         return res.json({
             success: true,

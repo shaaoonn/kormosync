@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 import jwt from 'jsonwebtoken';
 
-const prisma = new PrismaClient();
 
 // ⚠️ DEV ONLY - These endpoints are for development testing only
 // Remove or disable in production!

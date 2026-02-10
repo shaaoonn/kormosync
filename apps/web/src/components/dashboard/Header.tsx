@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 import { Bell, User as UserIcon, Menu, CreditCard, CheckCircle } from "lucide-react";
-import { User } from "firebase/auth";
 import axios from "axios";
 import Link from "next/link";
 
@@ -12,12 +12,8 @@ interface UserProfile {
 }
 
 export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }) {
-    const [user, setUser] = useState<User | null>(null);
+    const { user: authUser, firebaseUser, token } = useAuth();
     const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [isPro, setIsPro] = useState(false);
-
-    const [planName, setPlanName] = useState<string | null>(null);
 
     const getPlanNameFromEmployees = (maxEmployees: number) => {
         if (maxEmployees <= 10) return "Startup";
@@ -27,10 +23,15 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
         return "Enterprise";
     };
 
-    const fetchProfile = async (token: string) => {
+    // Use auth context data — no duplicate /auth/sync call needed
+    const isPro = false; // Will be set from profile/subscription data
+    const planName: string | null = null;
+
+    const fetchProfile = async (tkn: string) => {
         try {
             const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/profile/me`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${tkn}` },
+                timeout: 10000, // 10s — don't block page render for profile
             });
             setProfile(res.data.profile);
         } catch (e) {
@@ -38,38 +39,18 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
         }
     };
 
+    // Fetch profile once when token is available (no duplicate auth listener)
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged(async (u) => {
-            setUser(u);
-            if (u) {
-                const token = await u.getIdToken();
-                // Fetch Subscription Status
-                try {
-                    const res = await axios.post(
-                        `${process.env.NEXT_PUBLIC_API_URL}/auth/sync`,
-                        {},
-                        { headers: { Authorization: `Bearer ${token}` } }
-                    );
-                    const company = res.data.user?.company;
-                    if (company?.subscriptionStatus === 'ACTIVE') {
-                        setIsPro(true);
-                        setPlanName(getPlanNameFromEmployees(company.maxEmployees || 10));
-                    }
-                } catch (e) {
-                    console.error("Failed to fetch subscription status", e);
-                }
-                // Fetch profile for image
-                await fetchProfile(token);
-            }
-        });
-        return () => unsubscribe();
-    }, []);
+        if (token) {
+            fetchProfile(token);
+        }
+    }, [token]);
 
     // Listen for profile updates (custom event)
     useEffect(() => {
         const handleProfileUpdate = async () => {
-            const token = await auth.currentUser?.getIdToken();
-            if (token) await fetchProfile(token);
+            const tkn = await auth.currentUser?.getIdToken();
+            if (tkn) await fetchProfile(tkn);
         };
         window.addEventListener('profile-updated', handleProfileUpdate);
         return () => window.removeEventListener('profile-updated', handleProfileUpdate);
@@ -79,7 +60,7 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
 
     const getAvatar = () => {
         if (profile?.profileImage) return profile.profileImage;
-        const name = profile?.name || user?.displayName || user?.email || "U";
+        const name = profile?.name || authUser?.name || firebaseUser?.email || "U";
         return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366f1&color=fff&size=40`;
     };
 
@@ -128,7 +109,7 @@ export default function Header({ toggleSidebar }: { toggleSidebar?: () => void }
                         className="w-8 h-8 rounded-full object-cover border-2 border-indigo-100"
                     />
                     <span className="hidden md:block text-sm font-medium text-gray-700">
-                        {profile?.name || user?.displayName || "User"}
+                        {profile?.name || firebaseUser?.displayName || authUser?.name || "User"}
                     </span>
                 </Link>
             </div>

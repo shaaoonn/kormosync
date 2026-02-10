@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 
-const prisma = new PrismaClient();
 
 // Get Company Members
 export const getMembers = async (req: Request, res: Response) => {

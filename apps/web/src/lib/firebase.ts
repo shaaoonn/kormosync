@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, User } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, browserLocalPersistence, setPersistence, User } from "firebase/auth";
 
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,6 +13,12 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
+
+// Set explicit persistence — survives tab close/browser restart
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.error('[FIREBASE] Failed to set persistence:', err);
+});
+
 const googleProvider = new GoogleAuthProvider();
 
 export { auth, googleProvider, signInWithPopup };

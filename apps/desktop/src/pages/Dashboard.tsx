@@ -1,654 +1,1300 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { auth } from '../firebase';
-import axios from 'axios';
+// ============================================================
+// KormoSync Desktop App - Dashboard Page
+// List-based layout with sections: Active → Upcoming → Completed
+// ============================================================
+
+import React, { useMemo, useState, useEffect } from 'react';
+import styled, { css } from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { io, Socket } from 'socket.io-client';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../firebase';
+import { API_URL } from '../utils/constants';
+import { theme } from '../styles/theme';
+import {
+    Card,
+    Timer,
+    SearchInput,
+    SkeletonList,
+    Badge,
+    ProgressBar,
+} from '../components/ui';
+import { useAppStore } from '../store/useAppStore';
+import { formatMoney, formatDuration, getScheduleInfo } from '../utils/formatters';
+import { assignmentApi, earningsApi, leaveApi, dutyApi } from '../services/api';
+import type { Task, ScheduleStatus, TaskAssignment, EarningsBreakdown, LeaveBalance } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
-
-// ==========================================
-// Types
-// ==========================================
-interface Task {
-    id: string;
-    title: string;
-    description?: string;
-    status: string;
-    priority?: string;
-    deadline?: string;
-    billingType?: string;
-    fixedPrice?: number;
-    hourlyRate?: number;
-    estimatedHours?: number;
-    scheduleDays?: number[];
-    startTime?: string;
-    endTime?: string;
-    companyId?: string;
-    screenshotInterval?: number; // Screenshot interval in minutes (1-60)
+interface DutyProgress {
+    todayWorkedSeconds: number;
+    minDailySeconds: number;
+    expectedDailySeconds: number;
+    progressPercent: number;
+    attendanceAchieved: boolean;
+    salaryType: string;
+    virtualHourlyRate?: number;
+    currency: string;
 }
 
-// ==========================================
-// Utility Functions
-// ==========================================
-const formatTime = (seconds: number): string => {
-    const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${h}:${m}:${s}`;
-};
+// ============================================================
+// Styled Components
+// ============================================================
+const PageWrapper = styled.div`
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+    background: ${theme.colors.bg.primary};
+    overflow: hidden;
+`;
 
-const formatTimeUntil = (task: Task, now: Date): { text: string; color: string; isActive: boolean } | null => {
-    if (task.billingType !== 'SCHEDULED' || !task.startTime || !task.scheduleDays) return null;
-    const today = now.getDay();
-    if (!task.scheduleDays.includes(today)) return null;
+const Header = styled.header`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: ${theme.spacing.sm} ${theme.spacing.md};
+    border-bottom: 1px solid ${theme.colors.border.primary};
+    background: ${theme.colors.bg.secondary};
+    -webkit-app-region: drag;
+    flex-shrink: 0;
+    min-width: 0;
+    gap: ${theme.spacing.sm};
+`;
 
-    const [sh, sm] = task.startTime.split(':').map(Number);
-    const [eh, em] = (task.endTime || '23:59').split(':').map(Number);
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-    const startMin = sh * 60 + sm;
-    const endMin = eh * 60 + em;
+const HeaderLeft = styled.div`
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    -webkit-app-region: no-drag;
+    flex-shrink: 0;
+`;
 
-    if (nowMin >= startMin && nowMin <= endMin) {
-        const remaining = (endMin - nowMin) * 60;
-        return { text: `বাকি ${Math.floor(remaining / 60)} মিনিট`, color: '#22c55e', isActive: true };
-    } else if (nowMin < startMin) {
-        const until = startMin - nowMin;
-        if (until <= 30) return { text: `${until} মিনিটে শুরু`, color: '#eab308', isActive: false };
-        return { text: `${task.startTime} এ শুরু`, color: '#64748b', isActive: false };
+const Logo = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+`;
+
+const LogoIcon = styled.div`
+    width: 36px;
+    height: 36px;
+    background: ${theme.colors.primary.gradient};
+    border-radius: ${theme.borderRadius.md};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+`;
+
+const LogoText = styled.div``;
+
+const LogoTitle = styled.h1`
+    margin: 0;
+    font-size: ${theme.typography.fontSize.lg};
+    font-weight: ${theme.typography.fontWeight.bold};
+    color: ${theme.colors.text.primary};
+`;
+
+const LogoSubtitle = styled.p`
+    margin: 0;
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+`;
+
+const HeaderRight = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+    -webkit-app-region: no-drag;
+    min-width: 0;
+    flex-shrink: 1;
+`;
+
+const GlobalTimer = styled.div`
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    padding: ${theme.spacing.xs} ${theme.spacing.sm};
+    background: ${theme.colors.bg.tertiary};
+    border-radius: ${theme.borderRadius.lg};
+    border: 1px solid ${theme.colors.status.success}40;
+    flex-shrink: 0;
+    white-space: nowrap;
+`;
+
+const GlobalTimerLabel = styled.span`
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+`;
+
+const CurrentTime = styled.div`
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: ${theme.spacing.xs} ${theme.spacing.sm};
+    background: ${theme.colors.primary.main}15;
+    border-radius: ${theme.borderRadius.lg};
+    border: 1px solid ${theme.colors.primary.main}30;
+    flex-shrink: 0;
+    white-space: nowrap;
+`;
+
+const TimeDisplay = styled.div`
+    font-size: ${theme.typography.fontSize.lg};
+    font-weight: ${theme.typography.fontWeight.bold};
+    font-family: 'JetBrains Mono', monospace;
+    color: ${theme.colors.primary.main};
+    line-height: 1.2;
+`;
+
+const DateDisplay = styled.div`
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.secondary};
+`;
+
+const Content = styled.main`
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: ${theme.spacing.lg} ${theme.spacing.xl};
+    width: 100%;
+    min-width: 0;
+`;
+
+// Stats Grid - Compact
+const StatsGrid = styled.div`
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: ${theme.spacing.sm};
+    margin-bottom: ${theme.spacing.lg};
+`;
+
+const StatCard = styled(Card)`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+    padding: ${theme.spacing.md} !important;
+`;
+
+const StatIcon = styled.div<{ $color: string }>`
+    width: 40px;
+    height: 40px;
+    border-radius: ${theme.borderRadius.md};
+    background: ${({ $color }) => $color}15;
+    color: ${({ $color }) => $color};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+`;
+
+const StatInfo = styled.div`
+    min-width: 0;
+`;
+
+const StatValue = styled.div`
+    font-size: ${theme.typography.fontSize.xl};
+    font-weight: ${theme.typography.fontWeight.bold};
+    color: ${theme.colors.text.primary};
+    line-height: 1.2;
+`;
+
+const StatLabel = styled.div`
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${theme.colors.text.secondary};
+    margin-top: 2px;
+`;
+
+// Section with visible separation
+const Section = styled.section<{ $variant?: 'active' | 'upcoming' | 'completed' }>`
+    margin-bottom: ${theme.spacing.lg};
+    background: ${({ $variant }) =>
+        $variant === 'active' ? `${theme.colors.status.success}08` :
+        $variant === 'completed' ? `${theme.colors.status.error}06` :
+        'transparent'};
+    border: 1px solid ${({ $variant }) =>
+        $variant === 'active' ? `${theme.colors.status.success}25` :
+        $variant === 'completed' ? `${theme.colors.status.error}20` :
+        theme.colors.border.primary};
+    border-radius: ${theme.borderRadius.lg};
+    padding: ${theme.spacing.lg};
+`;
+
+const SectionHeader = styled.div`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: ${theme.spacing.md};
+`;
+
+const SectionTitle = styled.h2<{ $color?: string }>`
+    margin: 0;
+    font-size: ${theme.typography.fontSize.md};
+    font-weight: ${theme.typography.fontWeight.bold};
+    color: ${({ $color }) => $color || theme.colors.text.primary};
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+`;
+
+const SectionCount = styled.span`
+    font-size: ${theme.typography.fontSize.sm};
+    font-weight: ${theme.typography.fontWeight.normal};
+    color: ${theme.colors.text.muted};
+`;
+
+// List Layout
+const TasksList = styled.div`
+    display: flex;
+    flex-direction: column;
+    gap: ${theme.spacing.sm};
+`;
+
+// Task List Row
+const TaskListRow = styled.div<{ $isActive?: boolean; $isDone?: boolean; $isPaused?: boolean }>`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.md};
+    padding: ${theme.spacing.md} ${theme.spacing.lg};
+    background: ${({ $isDone }) => $isDone ? `${theme.colors.status.error}08` : theme.colors.bg.secondary};
+    border: 1px solid ${({ $isActive, $isDone }) =>
+        $isActive ? `${theme.colors.status.success}50` :
+        $isDone ? `${theme.colors.status.error}25` :
+        theme.colors.border.primary};
+    border-radius: ${theme.borderRadius.md};
+    cursor: pointer;
+    transition: all ${theme.animation.duration.fast};
+    min-height: 60px;
+
+    ${({ $isActive }) => $isActive && css`
+        background: ${theme.colors.status.success}10;
+        box-shadow: 0 0 0 1px ${theme.colors.status.success}30;
+    `}
+
+    ${({ $isPaused }) => $isPaused && css`
+        border-left: 3px solid ${theme.colors.status.warning};
+    `}
+
+    &:hover {
+        background: ${theme.colors.bg.hover};
+        border-color: ${theme.colors.primary.main}40;
     }
-    return { text: 'সময় শেষ', color: '#ef4444', isActive: false };
-};
+`;
 
-const getDayName = (day: number): string => {
-    return ['রবি', 'সোম', 'মঙ্গল', 'বুধ', 'বৃহ', 'শুক্র', 'শনি'][day];
-};
+const TaskStatusDot = styled.div<{ $status: 'active' | 'paused' | 'todo' | 'done' }>`
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: ${({ $status }) =>
+        $status === 'active' ? theme.colors.status.success :
+        $status === 'paused' ? theme.colors.status.warning :
+        $status === 'done' ? theme.colors.status.error :
+        theme.colors.text.muted};
 
-// ==========================================
-// Main Component
-// ==========================================
-const Dashboard = () => {
-    // State
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-    const [isTracking, setIsTracking] = useState(false);
-    const [timer, setTimer] = useState(0);
-    const [currentTime, setCurrentTime] = useState(new Date());
-    const [timeLogId, setTimeLogId] = useState<string | null>(null);
-    const [todayStats, setTodayStats] = useState({ hours: 0, minutes: 0 });
-    const [loading, setLoading] = useState(true);
-    const [userCompanyId, setUserCompanyId] = useState<string>('');
+    ${({ $status }) => $status === 'active' && css`
+        box-shadow: 0 0 8px ${theme.colors.status.success}80;
+        animation: dotPulse 2s ease-in-out infinite;
+        @keyframes dotPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    `}
+`;
 
-    // Refs
-    const intervalRef = useRef<any>(null);
-    const screenshotIntervalRef = useRef<any>(null);
-    const socketRef = useRef<Socket | null>(null);
-    const trackingIdRef = useRef<string | null>(null);
+const TaskRowIcon = styled.div`
+    width: 36px;
+    height: 36px;
+    border-radius: ${theme.borderRadius.md};
+    background: ${theme.colors.bg.tertiary};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+`;
+
+const TaskRowInfo = styled.div`
+    flex: 1;
+    min-width: 0;
+`;
+
+const TaskRowTitle = styled.div`
+    font-size: ${theme.typography.fontSize.base};
+    font-weight: ${theme.typography.fontWeight.semibold};
+    color: ${theme.colors.text.primary};
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+`;
+
+const TaskRowMeta = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+    margin-top: 2px;
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+`;
+
+const TaskRowStats = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.lg};
+    flex-shrink: 0;
+`;
+
+const TaskRowStat = styled.div`
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+`;
+
+const TaskRowStatLabel = styled.span`
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+`;
+
+const TaskRowStatValue = styled.span<{ $color?: string }>`
+    font-size: ${theme.typography.fontSize.sm};
+    font-weight: ${theme.typography.fontWeight.semibold};
+    color: ${({ $color }) => $color || theme.colors.text.primary};
+    font-family: 'JetBrains Mono', monospace;
+`;
+
+const DeadlineBadge = styled.span<{ $urgent?: boolean; $warning?: boolean }>`
+    padding: 2px 8px;
+    border-radius: ${theme.borderRadius.full};
+    font-size: ${theme.typography.fontSize.xs};
+    font-weight: 600;
+    ${({ $urgent }) => $urgent && css`
+        background: ${theme.colors.status.error}20;
+        color: ${theme.colors.status.error};
+        border: 1px solid ${theme.colors.status.error}40;
+    `}
+    ${({ $warning }) => $warning && css`
+        background: ${theme.colors.status.warning}20;
+        color: ${theme.colors.status.warning};
+        border: 1px solid ${theme.colors.status.warning}40;
+    `}
+    ${({ $urgent, $warning }) => !$urgent && !$warning && css`
+        background: ${theme.colors.bg.tertiary};
+        color: ${theme.colors.text.secondary};
+        border: 1px solid ${theme.colors.border.primary};
+    `}
+`;
+
+const TaskRowBadges = styled.div`
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+`;
+
+const MiniProgressBar = styled.div`
+    width: 80px;
+    flex-shrink: 0;
+`;
+
+const WebButton = styled.button`
+    padding: ${theme.spacing.xs} ${theme.spacing.md};
+    background: rgba(234, 179, 8, 0.15);
+    color: ${theme.colors.primary.main};
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: ${theme.borderRadius.md};
+    font-size: ${theme.typography.fontSize.xs};
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    &:hover {
+        background: rgba(234, 179, 8, 0.25);
+    }
+`;
+
+const EmptyState = styled.div`
+    text-align: center;
+    padding: ${theme.spacing['3xl']} ${theme.spacing.xl};
+    color: ${theme.colors.text.muted};
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 200px;
+`;
+
+const EmptyIcon = styled.div`
+    font-size: 56px;
+    margin-bottom: ${theme.spacing.md};
+    opacity: 0.4;
+`;
+
+const EmptyText = styled.p`
+    font-size: ${theme.typography.fontSize.base};
+    margin: 0;
+    color: ${theme.colors.text.secondary};
+`;
+
+const RetryButton = styled.button`
+    margin-top: ${theme.spacing.md};
+    padding: ${theme.spacing.sm} ${theme.spacing.lg};
+    background: ${theme.colors.primary.main};
+    color: ${theme.colors.bg.primary};
+    border: none;
+    border-radius: ${theme.borderRadius.md};
+    font-size: ${theme.typography.fontSize.sm};
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    &:hover {
+        background: ${theme.colors.primary.light};
+        transform: translateY(-1px);
+    }
+`;
+
+const PausedTag = styled.span`
+    padding: 2px 6px;
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: ${theme.borderRadius.sm};
+    font-size: ${theme.typography.fontSize.xs};
+    font-weight: 600;
+`;
+
+const TaskBadge = styled.span<{ color: string }>`
+    padding: 1px 6px;
+    background: ${props => props.color}15;
+    color: ${props => props.color};
+    border: 1px solid ${props => props.color}30;
+    border-radius: ${theme.borderRadius.sm};
+    font-size: 9px;
+    font-weight: 600;
+    white-space: nowrap;
+`;
+
+// Assignment Approval Section
+const AssignmentSection = styled.div`
+    margin-bottom: ${theme.spacing.lg};
+`;
+
+const AssignmentCard = styled.div`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: ${theme.spacing.md} ${theme.spacing.lg};
+    background: ${theme.colors.bg.secondary};
+    border: 1px solid ${theme.colors.primary.main}30;
+    border-radius: ${theme.borderRadius.lg};
+    margin-bottom: ${theme.spacing.sm};
+    transition: all 0.2s ease;
+    &:hover {
+        border-color: ${theme.colors.primary.main}60;
+        background: ${theme.colors.bg.tertiary};
+    }
+`;
+
+const AssignmentInfo = styled.div`
+    flex: 1;
+    min-width: 0;
+`;
+
+const AssignmentTitle = styled.div`
+    font-size: ${theme.typography.fontSize.md};
+    font-weight: ${theme.typography.fontWeight.semibold};
+    color: ${theme.colors.text.primary};
+    margin-bottom: 4px;
+`;
+
+const AssignmentMeta = styled.div`
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+    display: flex;
+    gap: ${theme.spacing.md};
+    flex-wrap: wrap;
+`;
+
+const AssignmentActions = styled.div`
+    display: flex;
+    gap: ${theme.spacing.sm};
+    flex-shrink: 0;
+    margin-left: ${theme.spacing.md};
+`;
+
+const AcceptBtn = styled.button`
+    padding: 6px 16px;
+    background: ${theme.colors.status.success};
+    color: white;
+    border: none;
+    border-radius: ${theme.borderRadius.md};
+    font-size: ${theme.typography.fontSize.sm};
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    &:hover { opacity: 0.9; transform: translateY(-1px); }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+`;
+
+const RejectBtn = styled.button`
+    padding: 6px 16px;
+    background: transparent;
+    color: ${theme.colors.status.error};
+    border: 1px solid ${theme.colors.status.error}60;
+    border-radius: ${theme.borderRadius.md};
+    font-size: ${theme.typography.fontSize.sm};
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    &:hover { background: ${theme.colors.status.error}15; }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+`;
+
+// Earnings Section
+const EarningsCard = styled.div`
+    background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
+    border-radius: ${theme.borderRadius.lg};
+    padding: ${theme.spacing.lg};
+    margin-bottom: ${theme.spacing.lg};
+    color: white;
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 200px;
+        height: 200px;
+        background: rgba(255,255,255,0.1);
+        border-radius: 50%;
+    }
+`;
+
+const EarningsLabel = styled.div`
+    font-size: ${theme.typography.fontSize.sm};
+    opacity: 0.85;
+    margin-bottom: 4px;
+`;
+
+const EarningsAmount = styled.div`
+    font-size: 28px;
+    font-weight: ${theme.typography.fontWeight.bold};
+    margin-bottom: ${theme.spacing.xs};
+    font-family: 'JetBrains Mono', monospace;
+`;
+
+const EarningsBreakdownRow = styled.div`
+    display: flex;
+    gap: ${theme.spacing.lg};
+    font-size: ${theme.typography.fontSize.xs};
+    opacity: 0.8;
+    flex-wrap: wrap;
+`;
+
+const EarningsLeaveRow = styled.div`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: ${theme.spacing.sm};
+    padding-top: ${theme.spacing.sm};
+    border-top: 1px solid rgba(255,255,255,0.2);
+`;
+
+const LeaveBalanceChip = styled.div`
+    display: flex;
+    gap: ${theme.spacing.md};
+    font-size: ${theme.typography.fontSize.xs};
+    opacity: 0.85;
+`;
+
+const LeaveRequestBtn = styled.button`
+    padding: 4px 12px;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: ${theme.borderRadius.full};
+    font-size: ${theme.typography.fontSize.xs};
+    font-weight: 600;
+    cursor: pointer;
+    font-family: ${theme.typography.fontFamily};
+    transition: all 0.2s;
+    -webkit-app-region: no-drag;
+    &:hover {
+        background: rgba(255,255,255,0.3);
+    }
+`;
+
+// Duty Achievement Progress Card
+const DutyCard = styled.div`
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #a855f7 100%);
+    border-radius: ${theme.borderRadius.lg};
+    padding: ${theme.spacing.lg};
+    margin-bottom: ${theme.spacing.lg};
+    color: white;
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 200px;
+        height: 200px;
+        background: rgba(255,255,255,0.08);
+        border-radius: 50%;
+    }
+`;
+
+const DutyTitle = styled.div`
+    font-size: ${theme.typography.fontSize.sm};
+    opacity: 0.85;
+    margin-bottom: ${theme.spacing.sm};
+`;
+
+const DutyProgressBarWrapper = styled.div`
+    width: 100%;
+    height: 12px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: ${theme.spacing.sm};
+`;
+
+const DutyProgressBarFill = styled.div<{ $percent: number; $achieved: boolean }>`
+    height: 100%;
+    width: ${({ $percent }) => Math.min(100, $percent)}%;
+    background: ${({ $achieved }) => $achieved ? '#34d399' : '#fbbf24'};
+    border-radius: 6px;
+    transition: width 0.5s ease;
+`;
+
+const DutyStats = styled.div`
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: ${theme.typography.fontSize.xs};
+    opacity: 0.9;
+`;
+
+const DutyBadge = styled.span<{ $achieved: boolean }>`
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: ${theme.borderRadius.full};
+    font-size: ${theme.typography.fontSize.xs};
+    font-weight: 600;
+    background: ${({ $achieved }) => $achieved ? 'rgba(52, 211, 153, 0.3)' : 'rgba(251, 191, 36, 0.3)'};
+    color: ${({ $achieved }) => $achieved ? '#d1fae5' : '#fef3c7'};
+`;
+
+const SectionEmptyMessage = styled.div`
+    padding: ${theme.spacing.md};
+    text-align: center;
+    color: ${theme.colors.text.muted};
+    font-size: ${theme.typography.fontSize.sm};
+`;
+
+// ============================================================
+// Component
+// ============================================================
+const DAY_NAMES_BN = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
+
+// Helper: deadline proximity
+function getDeadlineInfo(deadline?: string): { text: string; hoursLeft: number } | null {
+    if (!deadline) return null;
+    const now = new Date();
+    const dl = new Date(deadline);
+    const diffMs = dl.getTime() - now.getTime();
+    const hoursLeft = diffMs / (1000 * 60 * 60);
+    const daysLeft = Math.floor(hoursLeft / 24);
+
+    if (hoursLeft < 0) return { text: 'মেয়াদ শেষ!', hoursLeft };
+    if (hoursLeft < 24) return { text: `${Math.ceil(hoursLeft)} ঘন্টা বাকি`, hoursLeft };
+    if (daysLeft === 1) return { text: 'আগামীকাল', hoursLeft };
+    return { text: `${daysLeft} দিন বাকি`, hoursLeft };
+}
+
+export const Dashboard: React.FC = () => {
     const navigate = useNavigate();
+    const { tasks, activeTimers, isLoading, setSelectedTask, setCurrentView, fetchTasks } = useAppStore();
+    const tickCounter = useAppStore((s) => s.tickCounter);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [pendingAssignments, setPendingAssignments] = useState<TaskAssignment[]>([]);
+    const [assignmentLoading, setAssignmentLoading] = useState<string | null>(null);
+    const [currentEarnings, setCurrentEarnings] = useState<EarningsBreakdown | null>(null);
+    const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
+    const [dutyProgress, setDutyProgress] = useState<DutyProgress | null>(null);
+    const addToast = useAppStore((s) => s.addToast);
+    const currentTime = useMemo(() => new Date(), [tickCounter]);
 
-    // Current Time Update
+    // Fetch current earnings
+    const fetchCurrentEarnings = async () => {
+        try {
+            const earnings = await earningsApi.getCurrentEarnings();
+            setCurrentEarnings(earnings);
+        } catch (err) {
+            console.error('Failed to fetch current earnings:', err);
+        }
+    };
+
+    // Fetch leave balance
+    const fetchLeaveBalance = async () => {
+        try {
+            const balance = await leaveApi.getMyBalance();
+            setLeaveBalance(balance);
+        } catch (err) {
+            console.error('Failed to fetch leave balance:', err);
+        }
+    };
+
+    // Fetch duty progress (for MONTHLY salary users)
+    const fetchDutyProgress = async () => {
+        try {
+            const progress = await dutyApi.getDutyProgress();
+            setDutyProgress(progress);
+        } catch (err) {
+            console.error('Failed to fetch duty progress:', err);
+        }
+    };
+
+    // Fetch pending assignments
+    const fetchPendingAssignments = async () => {
+        try {
+            const assignments = await assignmentApi.getPending();
+            setPendingAssignments(assignments);
+        } catch (err) {
+            console.error('Failed to fetch pending assignments:', err);
+        }
+    };
+
+    // Handle accept assignment
+    const handleAcceptAssignment = async (assignmentId: string) => {
+        setAssignmentLoading(assignmentId);
+        try {
+            await assignmentApi.accept(assignmentId);
+            setPendingAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+            addToast('success', 'টাস্ক সফলভাবে গৃহীত হয়েছে!');
+            fetchTasks();
+        } catch (err: any) {
+            addToast('error', err.message || 'টাস্ক গ্রহণ ব্যর্থ হয়েছে');
+        } finally {
+            setAssignmentLoading(null);
+        }
+    };
+
+    // Handle reject assignment
+    const handleRejectAssignment = async (assignmentId: string) => {
+        setAssignmentLoading(assignmentId);
+        try {
+            await assignmentApi.reject(assignmentId);
+            setPendingAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+            addToast('info', 'টাস্ক প্রত্যাখ্যান করা হয়েছে');
+        } catch (err: any) {
+            addToast('error', err.message || 'টাস্ক প্রত্যাখ্যান ব্যর্থ হয়েছে');
+        } finally {
+            setAssignmentLoading(null);
+        }
+    };
+
+    // Fetch tasks when user is authenticated
     useEffect(() => {
-        const t = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => clearInterval(t);
-    }, []);
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                console.log('User authenticated, Dashboard.tsx:721');
+                // Always fetch tasks first (cache-first, works offline)
+                fetchTasks();
 
-    // Socket.IO Connection
-    useEffect(() => {
-        socketRef.current = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
-
-        socketRef.current.on('connect', () => console.log('🔌 Socket connected'));
-
-        // Notification: Task Assigned
-        socketRef.current.on('task:assigned', (data: { title: string }) => {
-            new Notification('New Task Assigned', {
-                body: `You have been assigned a new task: ${data.title}`,
-            });
-            // Refresh tasks
-            const user = auth.currentUser;
-            if (user) fetchTasks(user);
-        });
-
-        // Notification: Idle Alert
-        socketRef.current.on('idle:alert', (data: { message: string }) => {
-            new Notification('Idle Alert', {
-                body: data.message || 'You have been idle for too long.',
-                icon: '/electron-vite.svg' // optional
-            });
-        });
-
-        return () => { socketRef.current?.disconnect(); };
-    }, []);
-
-    // Auth & Data Fetching
-    useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged(async (user) => {
-            if (!user) navigate('/login');
-            else {
-                await fetchUserProfile(user);
-                await fetchTasks(user);
-                await fetchTodayStats(user);
-                setLoading(false);
+                // Sequential API calls — prevents overwhelming the API with 5+ concurrent requests on load
+                // Each call completes before the next starts. If API is slow/down, we bail early
+                // instead of 5 requests all waiting 15s each (= 75s total freeze).
+                if (navigator.onLine) {
+                    (async () => {
+                        try {
+                            const { authApi } = await import('../services/api');
+                            await authApi.syncUser();
+                            await authApi.getMe();
+                        } catch (err) {
+                            console.warn('User sync failed, continuing with cached data:', err);
+                        }
+                        // Each subsequent call is independent — wrapped in try/catch so one failure doesn't stop others
+                        try { await fetchPendingAssignments(); } catch { /* non-critical */ }
+                        try { await fetchCurrentEarnings(); } catch { /* non-critical */ }
+                        try { await fetchLeaveBalance(); } catch { /* non-critical */ }
+                        try { await fetchDutyProgress(); } catch { /* non-critical */ }
+                    })();
+                }
+            } else {
+                console.log('User not authenticated, redirecting to login');
+                navigate('/login');
             }
         });
         return () => unsubscribe();
+    }, [fetchTasks, navigate]);
+
+    // Auto-refresh duty progress every 5 minutes
+    useEffect(() => {
+        if (!dutyProgress || dutyProgress.salaryType !== 'MONTHLY') return;
+        const interval = setInterval(() => {
+            if (navigator.onLine) fetchDutyProgress();
+        }, 5 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, [dutyProgress?.salaryType]);
+
+    // Listen for earnings-update events (dispatched after each screenshot upload)
+    useEffect(() => {
+        const handler = () => {
+            // Debounce: wait 2s for server-side cache invalidation to complete, then refetch
+            setTimeout(() => {
+                if (navigator.onLine) fetchCurrentEarnings().catch(() => {});
+            }, 2000);
+        };
+        window.addEventListener('earnings-update', handler);
+        return () => window.removeEventListener('earnings-update', handler);
     }, []);
 
-    // Listen for stop from main process
-    useEffect(() => {
-        window.electron?.onStopTracking?.(() => { if (isTracking) stopTracking(); });
-    }, [isTracking]);
-
-    const fetchUserProfile = async (user: any) => {
-        try {
-            const token = await user.getIdToken();
-            const res = await axios.get(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
-            if (res.data.success && res.data.user) {
-                const { companyId, id: userId } = res.data.user;
-                setUserCompanyId(companyId);
-                console.log('🏢 Company ID:', companyId);
-
-                // Join user specific room for notifications
-                if (socketRef.current) {
-                    socketRef.current.emit('join:user', userId);
-                    console.log('🔗 Joining user room:', userId);
-                }
-            }
-        } catch (e) { console.error("Failed to fetch user profile", e); }
-    };
-
-    const fetchTasks = async (user: any) => {
-        try {
-            const token = await user.getIdToken();
-            const res = await axios.get(`${API_URL}/tasks/list`, { headers: { Authorization: `Bearer ${token}` } });
-            if (res.data.success) setTasks(res.data.tasks);
-        } catch (e) { console.error("Failed to fetch tasks", e); }
-    };
-
-    const fetchTodayStats = async (user: any) => {
-        try {
-            const token = await user.getIdToken();
-            const res = await axios.get(`${API_URL}/activity/today`, { headers: { Authorization: `Bearer ${token}` } });
-            if (res.data.success) {
-                setTodayStats({ hours: res.data.stats.todayHours || 0, minutes: res.data.stats.todayMinutes || 0 });
-            }
-        } catch (e) { console.error("Failed to fetch stats", e); }
-    };
-
-    // Screenshot capture and upload
-    const captureAndUploadScreenshot = async () => {
-        try {
-            const user = auth.currentUser;
-            if (!user || !selectedTaskId) return;
-
-            console.log('📸 Capturing screenshot...');
-            const base64Image = await window.electron?.captureScreenshot();
-            if (!base64Image) {
-                console.error('Screenshot capture failed');
-                return;
-            }
-
-            // Get Real Activity Stats
-            const activityStats = await window.electron?.getActivityStats() || { keystrokes: 0, mouseClicks: 0 };
-            console.log('📊 Activity Stats:', activityStats);
-
-            // Convert base64 to blob
-            const byteChars = atob(base64Image);
-            const byteArray = new Uint8Array(byteChars.length);
-            for (let i = 0; i < byteChars.length; i++) {
-                byteArray[i] = byteChars.charCodeAt(i);
-            }
-            const blob = new Blob([byteArray], { type: 'image/png' });
-
-            // Create form data
-            const formData = new FormData();
-            formData.append('screenshot', blob, `screenshot_${Date.now()}.png`);
-            formData.append('taskId', selectedTaskId);
-            formData.append('keystrokes', activityStats.keystrokes.toString());
-            formData.append('mouseClicks', activityStats.mouseClicks.toString());
-            formData.append('activeSeconds', '300'); // Fixed interval for now
-            formData.append('capturedAt', new Date().toISOString());
-
-            const token = await user.getIdToken();
-            const response = await axios.post(`${API_URL}/screenshots/upload`, formData, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
-
-            if (response.data.success) {
-                console.log('✅ Screenshot uploaded successfully:', response.data.screenshot.id);
-            }
-        } catch (error) {
-            console.error('❌ Screenshot upload failed:', error);
-        }
-    };
-
-    const startTracking = async () => {
-        try {
-            const user = auth.currentUser;
-            if (!user || !selectedTaskId) return;
-
-            // Request permission for notifications if not granted
-            if (Notification.permission !== 'granted') {
-                Notification.requestPermission();
-            }
-
-            const token = await user.getIdToken();
-            const res = await axios.post(`${API_URL}/tasks/start`, { taskId: selectedTaskId }, { headers: { Authorization: `Bearer ${token}` } });
-            if (res.data.success) {
-                setTimeLogId(res.data.timeLog.id);
-                setIsTracking(true);
-                setTimer(0);
-
-                const trackingId = `${user.uid}-${Date.now()}`;
-                trackingIdRef.current = trackingId;
-
-                const taskDetails = tasks.find(t => t.id === selectedTaskId);
-                window.electron?.trackingStarted?.({
-                    taskName: taskDetails?.title || 'Unknown',
-                    taskId: selectedTaskId,
-                    endTime: taskDetails?.endTime
-                });
-
-                socketRef.current?.emit('tracking:start', {
-                    odId: trackingId,
-                    userId: user.uid,
-                    taskId: selectedTaskId,
-                    companyId: userCompanyId
-                });
-                console.log('📡 Emit tracking:start with companyId:', userCompanyId);
-
-                intervalRef.current = setInterval(() => {
-                    setTimer(p => {
-                        const newTime = p + 1;
-                        window.electron?.trackingTick?.(newTime);
-                        if (newTime % 30 === 0) {
-                            socketRef.current?.emit('tracking:tick', { odId: trackingIdRef.current, elapsedSeconds: newTime });
-                        }
-                        return newTime;
-                    });
-                }, 1000);
-
-                // Screenshot capture based on task's screenshotInterval setting
-                console.log('🔍 Task Details:', JSON.stringify(taskDetails, null, 2));
-                const screenshotIntervalMinutes = taskDetails?.screenshotInterval || 5;
-                console.log(`📷 Screenshot interval: ${screenshotIntervalMinutes} minutes`);
-                captureAndUploadScreenshot(); // First screenshot immediately
-                screenshotIntervalRef.current = setInterval(() => {
-                    captureAndUploadScreenshot();
-                }, screenshotIntervalMinutes * 60 * 1000);
-            }
-        } catch (e) {
-            console.error("Start failed", e);
-            alert("ট্র্যাকিং শুরু করা যায়নি।");
-        }
-    };
-
-    const stopTracking = async () => {
-        try {
-            const user = auth.currentUser;
-            if (!user || !timeLogId) return;
-            const token = await user.getIdToken();
-            await axios.post(`${API_URL}/tasks/stop`, { timeLogId }, { headers: { Authorization: `Bearer ${token}` } });
-            setIsTracking(false);
-            setTimeLogId(null);
-            clearInterval(intervalRef.current);
-            clearInterval(screenshotIntervalRef.current);
-            setTimer(0);
-            window.electron?.trackingStopped?.();
-            socketRef.current?.emit('tracking:stop', { odId: trackingIdRef.current });
-            trackingIdRef.current = null;
-            await fetchTodayStats(user);
-        } catch (e) { console.error("Stop failed", e); }
-    };
-
-    // Computed
-    const selectedTask = useMemo(() => tasks.find(t => t.id === selectedTaskId), [tasks, selectedTaskId]);
-    const activeTasks = useMemo(() => tasks.filter(t => t.status === 'IN_PROGRESS'), [tasks]);
-    const pendingTasks = useMemo(() => tasks.filter(t => t.status === 'PENDING' || t.status === 'TODO'), [tasks]);
-
-    if (loading) {
-        return (
-            <div style={{ background: '#0a0e1a', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#eab308' }}>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-                    <div style={{ fontSize: 18, fontFamily: "'Hind Siliguri', sans-serif" }}>লোড হচ্ছে...</div>
-                </div>
-            </div>
+    // Calculate global stats
+    const stats = useMemo(() => {
+        const totalTrackedToday = Object.values(activeTimers).reduce(
+            (acc, timer) => acc + timer.elapsedSeconds, 0
         );
-    }
+        const totalTasks = tasks.length;
+        const completedTasks = tasks.filter(
+            (t) => t.status === 'DONE' || t.subTasks?.every((st) => st.status === 'COMPLETED')
+        ).length;
+        const totalEarnings = tasks.reduce((acc, task) => {
+            if (!task.hourlyRate) return acc;
+            const trackedHours =
+                (task.subTasks?.reduce((a, st) => a + (st.trackedTime || 0), 0) || 0) / 3600;
+            return acc + trackedHours * task.hourlyRate;
+        }, 0);
+        const activeNow = Object.values(activeTimers).filter(t => !t.isPaused).length;
+        return { totalTrackedToday, totalTasks, completedTasks, totalEarnings, activeNow };
+    }, [tasks, activeTimers]);
+
+    // Search filter
+    const searchedTasks = useMemo(() => {
+        if (!searchQuery) return tasks;
+        const query = searchQuery.toLowerCase();
+        return tasks.filter(
+            (t) =>
+                t.title.toLowerCase().includes(query) ||
+                t.client?.name?.toLowerCase().includes(query)
+        );
+    }, [tasks, searchQuery]);
+
+    // Split tasks into 3 sections
+    const { activeTasks, upcomingTasks, completedTasks } = useMemo(() => {
+        const activeTimerTaskIds = new Set(Object.values(activeTimers).map(t => t.taskId));
+
+        // Active: has running timers OR status is IN_PROGRESS
+        const active: Task[] = [];
+        // Upcoming: TODO / not started
+        const upcoming: Task[] = [];
+        // Completed: DONE status (this month)
+        const completed: Task[] = [];
+
+        const now = new Date();
+        const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        for (const task of searchedTasks) {
+            const isDone = task.status === 'DONE' || task.subTasks?.every((st) => st.status === 'COMPLETED');
+            const isActiveTimer = activeTimerTaskIds.has(task.id);
+            const isInProgress = task.status === 'IN_PROGRESS' || task.subTasks?.some((st) => st.status === 'IN_PROGRESS');
+
+            if (isDone) {
+                completed.push(task);
+            } else if (isActiveTimer || isInProgress) {
+                active.push(task);
+            } else {
+                upcoming.push(task);
+            }
+        }
+
+        // Sort upcoming by deadline (nearest first)
+        upcoming.sort((a, b) => {
+            if (a.deadline && b.deadline) return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+            if (a.deadline) return -1;
+            if (b.deadline) return 1;
+            return 0;
+        });
+
+        return { activeTasks: active, upcomingTasks: upcoming, completedTasks: completed };
+    }, [searchedTasks, activeTimers]);
+
+    // Total running time
+    const totalRunningTime = useMemo(() => {
+        return Object.values(activeTimers)
+            .filter((t) => !t.isPaused)
+            .reduce((acc, t) => acc + t.elapsedSeconds, 0);
+    }, [activeTimers]);
+
+    const handleTaskClick = (task: Task) => {
+        setSelectedTask(task);
+        setCurrentView('playlist');
+        navigate('/playlist');
+    };
+
+    // Format current time
+    const formattedTime = currentTime.toLocaleTimeString('bn-BD', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+    const formattedDate = `${DAY_NAMES_BN[currentTime.getDay()]}, ${currentTime.toLocaleDateString('bn-BD')}`;
+
+    // Helper: render a task row
+    const renderTaskRow = (task: Task, sectionType: 'active' | 'upcoming' | 'completed') => {
+        const timerForTask = Object.values(activeTimers).filter(t => t.taskId === task.id);
+        const isRunning = timerForTask.some(t => !t.isPaused);
+        const isPaused = timerForTask.some(t => t.isPaused) && !isRunning;
+        const totalTracked = task.subTasks?.reduce((acc, st) => acc + (st.trackedTime || st.totalSeconds || 0), 0) || 0;
+        const deadlineInfo = getDeadlineInfo(task.deadline);
+        const completedSubs = task.subTasks?.filter(st => st.status === 'COMPLETED').length || 0;
+        const totalSubs = task.subTasks?.length || 0;
+        const progress = totalSubs > 0 ? (completedSubs / totalSubs) * 100 : 0;
+        const earnings = task.hourlyRate ? (totalTracked / 3600) * task.hourlyRate : null;
+        const runningTime = timerForTask.reduce((acc, t) => acc + t.elapsedSeconds, 0);
+
+        return (
+            <TaskListRow
+                key={task.id}
+                $isActive={isRunning}
+                $isDone={sectionType === 'completed'}
+                $isPaused={isPaused}
+                onClick={() => handleTaskClick(task)}
+            >
+                <TaskStatusDot $status={
+                    isRunning ? 'active' :
+                    isPaused ? 'paused' :
+                    sectionType === 'completed' ? 'done' : 'todo'
+                } />
+
+                <TaskRowIcon>{task.icon || '📋'}</TaskRowIcon>
+
+                <TaskRowInfo>
+                    <TaskRowTitle>{task.title}</TaskRowTitle>
+                    <TaskRowMeta>
+                        {task.client?.name && <span>{task.client.name}</span>}
+                        {task.client?.name && totalSubs > 0 && <span>•</span>}
+                        {totalSubs > 0 && <span>{completedSubs}/{totalSubs} সাবটাস্ক</span>}
+                        {task.isActive === false && <PausedTag>⏸ বন্ধ</PausedTag>}
+                    </TaskRowMeta>
+                </TaskRowInfo>
+
+                <TaskRowBadges>
+                    {task.isRecurring && (
+                        <TaskBadge color="#6366f1">🔄 {task.recurringType === 'DAILY' ? 'দৈনিক' : task.recurringType === 'WEEKLY' ? 'সাপ্তাহিক' : 'মাসিক'}</TaskBadge>
+                    )}
+                    {task.status === 'REVIEW' && (
+                        <TaskBadge color="#ea580c">🔍 রিভিউ</TaskBadge>
+                    )}
+                    {task.allowOvertime && (
+                        <TaskBadge color="#d97706">⏰ OT</TaskBadge>
+                    )}
+                </TaskRowBadges>
+
+                {/* Deadline Badge */}
+                {deadlineInfo && sectionType !== 'completed' && (
+                    <DeadlineBadge
+                        $urgent={deadlineInfo.hoursLeft < 24 && deadlineInfo.hoursLeft >= 0}
+                        $warning={deadlineInfo.hoursLeft >= 24 && deadlineInfo.hoursLeft < 48}
+                    >
+                        {deadlineInfo.hoursLeft < 0 ? '⚠️' : deadlineInfo.hoursLeft < 24 ? '🔴' : deadlineInfo.hoursLeft < 48 ? '🟡' : '📅'} {deadlineInfo.text}
+                    </DeadlineBadge>
+                )}
+
+                {/* Progress mini bar */}
+                {totalSubs > 0 && (
+                    <MiniProgressBar>
+                        <ProgressBar
+                            value={progress}
+                            variant={progress === 100 ? 'success' : 'primary'}
+                            size="sm"
+                        />
+                    </MiniProgressBar>
+                )}
+
+                <TaskRowStats>
+                    {/* Show running timer for active tasks */}
+                    {isRunning && (
+                        <TaskRowStat>
+                            <TaskRowStatLabel>চলমান</TaskRowStatLabel>
+                            <Timer seconds={runningTime} size="sm" isActive={true} />
+                        </TaskRowStat>
+                    )}
+
+                    <TaskRowStat>
+                        <TaskRowStatLabel>সময়</TaskRowStatLabel>
+                        <TaskRowStatValue>{formatDuration(totalTracked)}</TaskRowStatValue>
+                    </TaskRowStat>
+
+                    {earnings !== null && (
+                        <TaskRowStat>
+                            <TaskRowStatLabel>আয়</TaskRowStatLabel>
+                            <TaskRowStatValue $color={theme.colors.status.success}>
+                                {formatMoney(earnings, task.currency || 'BDT')}
+                            </TaskRowStatValue>
+                        </TaskRowStat>
+                    )}
+                </TaskRowStats>
+            </TaskListRow>
+        );
+    };
 
     return (
-        <div style={{
-            background: 'linear-gradient(135deg, #0a0e1a 0%, #1a1f2e 100%)',
-            minHeight: '100vh',
-            fontFamily: "'Hind Siliguri', 'Inter', sans-serif",
-            color: '#f1f5f9',
-            display: 'flex'
-        }}>
-            {/* ==================== LEFT SIDEBAR ==================== */}
-            <div style={{
-                width: 320,
-                background: 'rgba(15, 23, 42, 0.8)',
-                borderRight: '1px solid rgba(71, 85, 105, 0.3)',
-                display: 'flex',
-                flexDirection: 'column',
-                backdropFilter: 'blur(20px)'
-            }}>
-                {/* Header */}
-                <div style={{ padding: 24, borderBottom: '1px solid rgba(71, 85, 105, 0.3)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                        <div style={{
-                            width: 44, height: 44,
-                            background: 'linear-gradient(135deg, #eab308, #ca8a04)',
-                            borderRadius: 12,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 24
-                        }}>⚡</div>
-                        <div>
-                            <div style={{ fontWeight: 700, fontSize: 18 }}>KormoSync</div>
-                            <div style={{ fontSize: 12, color: '#94a3b8' }}>টাইম ট্র্যাকার</div>
-                        </div>
-                    </div>
+        <PageWrapper>
+            <Header>
+                <HeaderLeft>
+                    <Logo>
+                        <LogoIcon>⚡</LogoIcon>
+                        <LogoText>
+                            <LogoTitle>KormoSync</LogoTitle>
+                            <LogoSubtitle>টাইম ট্র্যাকার</LogoSubtitle>
+                        </LogoText>
+                    </Logo>
+                </HeaderLeft>
+                <HeaderRight>
+                    <WebButton onClick={() => window.electron?.openExternal?.('https://appkormosync.ejobsit.com/dashboard')}>
+                        🌐 ওয়েবে দেখুন
+                    </WebButton>
+                    <SearchInput
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="টাস্ক অনুসন্ধান..."
+                        style={{ width: '180px', minWidth: '120px', flexShrink: 1 }}
+                    />
+                    <CurrentTime>
+                        <TimeDisplay>{formattedTime}</TimeDisplay>
+                        <DateDisplay>{formattedDate}</DateDisplay>
+                    </CurrentTime>
+                    {totalRunningTime > 0 && (
+                        <GlobalTimer>
+                            <GlobalTimerLabel>চলমান সময়</GlobalTimerLabel>
+                            <Timer seconds={totalRunningTime} size="md" isActive={true} showIcon />
+                        </GlobalTimer>
+                    )}
+                </HeaderRight>
+            </Header>
 
-                    {/* Current Time Display */}
-                    <div style={{
-                        background: 'rgba(234, 179, 8, 0.1)',
-                        border: '1px solid rgba(234, 179, 8, 0.3)',
-                        borderRadius: 12,
-                        padding: 16,
-                        textAlign: 'center'
-                    }}>
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>বর্তমান সময়</div>
-                        <div style={{ fontSize: 32, fontWeight: 700, fontFamily: 'monospace', color: '#eab308' }}>
-                            {currentTime.toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </div>
-                        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-                            {getDayName(currentTime.getDay())}, {currentTime.toLocaleDateString('bn-BD')}
-                        </div>
-                    </div>
-                </div>
+            <Content>
+                {/* Earnings Card */}
+                {currentEarnings && (
+                    <EarningsCard>
+                        <EarningsLabel>শেষ বেতনের পর থেকে এ পর্যন্ত</EarningsLabel>
+                        <EarningsAmount>
+                            ৳{currentEarnings.netAmount?.toLocaleString('bn-BD', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                        </EarningsAmount>
+                        <EarningsBreakdownRow>
+                            <span>{(currentEarnings.workedHours || 0).toFixed(1)} ঘন্টা কাজ</span>
+                            {currentEarnings.paidLeaveDays > 0 && (
+                                <span>{currentEarnings.paidLeaveDays} দিন ছুটি (৳{(currentEarnings.leavePay || 0).toLocaleString()})</span>
+                            )}
+                            {currentEarnings.overtimeHours > 0 && (
+                                <span>{currentEarnings.overtimeHours.toFixed(1)}h ওভারটাইম (৳{(currentEarnings.overtimePay || 0).toLocaleString()})</span>
+                            )}
+                            {currentEarnings.penaltyAmount > 0 && (
+                                <span style={{ color: '#fca5a5' }}>-৳{currentEarnings.penaltyAmount.toLocaleString()} জরিমানা</span>
+                            )}
+                        </EarningsBreakdownRow>
+                        {leaveBalance && (
+                            <EarningsLeaveRow>
+                                <LeaveBalanceChip>
+                                    <span>বেতনসহ ছুটি: {(leaveBalance.paidRemaining ?? (leaveBalance.paidLeave - leaveBalance.paidUsed))} দিন</span>
+                                    <span>|</span>
+                                    <span>অসুস্থতা: {(leaveBalance.sickRemaining ?? (leaveBalance.sickLeave - leaveBalance.sickUsed))} দিন</span>
+                                </LeaveBalanceChip>
+                                <LeaveRequestBtn onClick={() => navigate('/leave')}>
+                                    🏖️ ছুটির আবেদন
+                                </LeaveRequestBtn>
+                            </EarningsLeaveRow>
+                        )}
+                    </EarningsCard>
+                )}
 
-                {/* Today Stats */}
-                <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(71, 85, 105, 0.3)' }}>
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>আজকের কাজ</div>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                        <div style={{ flex: 1, background: 'rgba(34, 197, 94, 0.1)', padding: 12, borderRadius: 10, textAlign: 'center' }}>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: '#22c55e' }}>{todayStats.hours}</div>
-                            <div style={{ fontSize: 11, color: '#94a3b8' }}>ঘন্টা</div>
-                        </div>
-                        <div style={{ flex: 1, background: 'rgba(59, 130, 246, 0.1)', padding: 12, borderRadius: 10, textAlign: 'center' }}>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: '#3b82f6' }}>{todayStats.minutes}</div>
-                            <div style={{ fontSize: 11, color: '#94a3b8' }}>মিনিট</div>
-                        </div>
-                        <div style={{ flex: 1, background: 'rgba(168, 85, 247, 0.1)', padding: 12, borderRadius: 10, textAlign: 'center' }}>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: '#a855f7' }}>{activeTasks.length}</div>
-                            <div style={{ fontSize: 11, color: '#94a3b8' }}>চলমান</div>
-                        </div>
-                    </div>
-                </div>
+                {/* Duty Achievement Progress — for MONTHLY salary users */}
+                {dutyProgress && dutyProgress.salaryType === 'MONTHLY' && dutyProgress.expectedDailySeconds > 0 && (
+                    <DutyCard>
+                        <DutyTitle>📊 আজকের ডিউটি অর্জন</DutyTitle>
+                        <DutyProgressBarWrapper>
+                            <DutyProgressBarFill
+                                $percent={dutyProgress.progressPercent}
+                                $achieved={dutyProgress.attendanceAchieved}
+                            />
+                        </DutyProgressBarWrapper>
+                        <DutyStats>
+                            <span>
+                                {formatDuration(dutyProgress.todayWorkedSeconds)} / {formatDuration(dutyProgress.expectedDailySeconds)}
+                                {' '}({dutyProgress.progressPercent}%)
+                            </span>
+                            <DutyBadge $achieved={dutyProgress.attendanceAchieved}>
+                                {dutyProgress.attendanceAchieved
+                                    ? '✅ উপস্থিতি সম্পন্ন'
+                                    : `⏳ আর ${formatDuration(Math.max(0, dutyProgress.minDailySeconds - dutyProgress.todayWorkedSeconds))} প্রয়োজন`
+                                }
+                            </DutyBadge>
+                        </DutyStats>
+                        {dutyProgress.virtualHourlyRate && (
+                            <DutyStats style={{ marginTop: '8px', opacity: 0.7 }}>
+                                <span>ভার্চুয়াল ঘন্টা রেট: ৳{dutyProgress.virtualHourlyRate.toFixed(0)}/hr</span>
+                            </DutyStats>
+                        )}
+                    </DutyCard>
+                )}
 
-                {/* Task List */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12, paddingLeft: 8 }}>কাজের তালিকা ({tasks.length})</div>
+                {/* Stats */}
+                <StatsGrid>
+                    <StatCard variant="default" padding="md">
+                        <StatIcon $color={theme.colors.primary.main}>⏱️</StatIcon>
+                        <StatInfo>
+                            <StatValue>{formatDuration(stats.totalTrackedToday)}</StatValue>
+                            <StatLabel>আজকের ট্র্যাক</StatLabel>
+                        </StatInfo>
+                    </StatCard>
+                    <StatCard variant="default" padding="md">
+                        <StatIcon $color={theme.colors.status.success}>💰</StatIcon>
+                        <StatInfo>
+                            <StatValue>{formatMoney(stats.totalEarnings, 'BDT')}</StatValue>
+                            <StatLabel>মোট আয়</StatLabel>
+                        </StatInfo>
+                    </StatCard>
+                    <StatCard variant="default" padding="md">
+                        <StatIcon $color={theme.colors.status.info}>📋</StatIcon>
+                        <StatInfo>
+                            <StatValue>{stats.completedTasks}/{stats.totalTasks}</StatValue>
+                            <StatLabel>সম্পন্ন টাস্ক</StatLabel>
+                        </StatInfo>
+                    </StatCard>
+                    <StatCard variant="default" padding="md">
+                        <StatIcon $color={theme.colors.status.warning}>🎯</StatIcon>
+                        <StatInfo>
+                            <StatValue>{stats.activeNow}</StatValue>
+                            <StatLabel>চলমান এখন</StatLabel>
+                        </StatInfo>
+                    </StatCard>
+                </StatsGrid>
 
-                    {tasks.map(task => {
-                        const timeInfo = formatTimeUntil(task, currentTime);
-                        const isSelected = selectedTaskId === task.id;
-
-                        return (
-                            <div
-                                key={task.id}
-                                onClick={() => setSelectedTaskId(task.id)}
-                                style={{
-                                    padding: 14,
-                                    marginBottom: 8,
-                                    borderRadius: 12,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                    background: isSelected
-                                        ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(234, 179, 8, 0.1))'
-                                        : 'rgba(30, 41, 59, 0.5)',
-                                    border: isSelected
-                                        ? '2px solid rgba(234, 179, 8, 0.5)'
-                                        : '1px solid rgba(71, 85, 105, 0.2)',
-                                }}
-                            >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                    <div style={{
-                                        width: 10, height: 10, borderRadius: '50%',
-                                        background: task.status === 'IN_PROGRESS' ? '#22c55e' : task.status === 'DONE' ? '#64748b' : '#eab308'
-                                    }} />
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{
-                                            fontWeight: 600,
-                                            fontSize: 14,
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
-                                            color: isSelected ? '#eab308' : '#f1f5f9'
-                                        }}>{task.title}</div>
-                                        {timeInfo && (
-                                            <div style={{ fontSize: 11, color: timeInfo.color, marginTop: 2 }}>
-                                                {timeInfo.isActive && '🟢 '}{timeInfo.text}
-                                            </div>
+                {/* Pending Assignments */}
+                {pendingAssignments.length > 0 && (
+                    <AssignmentSection>
+                        <SectionHeader>
+                            <SectionTitle>
+                                📋 অনুমোদনের অপেক্ষায়
+                                <Badge variant="warning" size="sm">{pendingAssignments.length}</Badge>
+                            </SectionTitle>
+                        </SectionHeader>
+                        {pendingAssignments.map((assignment) => (
+                            <AssignmentCard key={assignment.id}>
+                                <AssignmentInfo>
+                                    <AssignmentTitle>{assignment.task.title}</AssignmentTitle>
+                                    <AssignmentMeta>
+                                        {assignment.task.creator?.name && <span>👤 {assignment.task.creator.name}</span>}
+                                        {assignment.task.priority && (
+                                            <span>
+                                                {assignment.task.priority === 'HIGH' ? '🔴' : assignment.task.priority === 'MEDIUM' ? '🟡' : '🟢'} {assignment.task.priority}
+                                            </span>
                                         )}
-                                    </div>
-                                    {task.startTime && (
-                                        <div style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace' }}>
-                                            {task.startTime}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
+                                        {assignment.task.deadline && (
+                                            <span>📅 {new Date(assignment.task.deadline).toLocaleDateString('bn-BD')}</span>
+                                        )}
+                                        {assignment.task.billingType === 'HOURLY' && assignment.task.hourlyRate && (
+                                            <span>💰 ৳{assignment.task.hourlyRate}/ঘন্টা</span>
+                                        )}
+                                    </AssignmentMeta>
+                                </AssignmentInfo>
+                                <AssignmentActions>
+                                    <AcceptBtn
+                                        onClick={() => handleAcceptAssignment(assignment.id)}
+                                        disabled={assignmentLoading === assignment.id}
+                                    >
+                                        {assignmentLoading === assignment.id ? '...' : '✅ গ্রহণ করুন'}
+                                    </AcceptBtn>
+                                    <RejectBtn
+                                        onClick={() => handleRejectAssignment(assignment.id)}
+                                        disabled={assignmentLoading === assignment.id}
+                                    >
+                                        ❌ প্রত্যাখ্যান
+                                    </RejectBtn>
+                                </AssignmentActions>
+                            </AssignmentCard>
+                        ))}
+                    </AssignmentSection>
+                )}
 
-            {/* ==================== MAIN CONTENT ==================== */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 32 }}>
-
-                {!selectedTask ? (
-                    /* No Task Selected */
-                    <div style={{
-                        flex: 1,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textAlign: 'center'
-                    }}>
-                        <div style={{ fontSize: 80, marginBottom: 24, opacity: 0.3 }}>📋</div>
-                        <div style={{ fontSize: 24, fontWeight: 600, color: '#64748b', marginBottom: 8 }}>
-                            কোনো কাজ নির্বাচিত নেই
-                        </div>
-                        <div style={{ fontSize: 14, color: '#475569' }}>
-                            বাম পাশের তালিকা থেকে একটি কাজ নির্বাচন করুন
-                        </div>
-                    </div>
+                {isLoading ? (
+                    <SkeletonList count={4} />
+                ) : tasks.length === 0 ? (
+                    <EmptyState>
+                        <EmptyIcon>📭</EmptyIcon>
+                        <EmptyText>কোনো টাস্ক পাওয়া যায়নি</EmptyText>
+                        <RetryButton onClick={() => fetchTasks()}>
+                            🔄 আবার চেষ্টা করুন
+                        </RetryButton>
+                    </EmptyState>
                 ) : (
-                    /* Task Selected */
                     <>
-                        {/* Task Title */}
-                        <div style={{ marginBottom: 32 }}>
-                            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>নির্বাচিত কাজ</div>
-                            <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, color: '#f1f5f9' }}>
-                                {selectedTask.title}
-                            </h1>
-                            {selectedTask.description && (
-                                <p style={{ fontSize: 14, color: '#94a3b8', marginTop: 8, lineHeight: 1.6 }}>
-                                    {selectedTask.description}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Timer Display */}
-                        <div style={{
-                            background: isTracking
-                                ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05))'
-                                : 'rgba(30, 41, 59, 0.5)',
-                            borderRadius: 24,
-                            padding: 48,
-                            textAlign: 'center',
-                            marginBottom: 32,
-                            border: isTracking ? '2px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(71, 85, 105, 0.3)'
-                        }}>
-                            {isTracking && (
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 8,
-                                    marginBottom: 16
-                                }}>
-                                    <div style={{
-                                        width: 12, height: 12, borderRadius: '50%',
-                                        background: '#ef4444',
-                                        animation: 'pulse 1.5s infinite'
-                                    }} />
-                                    <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 600 }}>রেকর্ডিং চলছে</span>
-                                </div>
-                            )}
-
-                            <div style={{
-                                fontSize: 72,
-                                fontWeight: 700,
-                                fontFamily: "'JetBrains Mono', 'Consolas', monospace",
-                                color: isTracking ? '#ef4444' : '#64748b',
-                                letterSpacing: 4,
-                                textShadow: isTracking ? '0 0 40px rgba(239, 68, 68, 0.3)' : 'none'
-                            }}>
-                                {formatTime(timer)}
-                            </div>
-
-                            <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 16 }}>
-                                {isTracking ? 'কাজ চলছে...' : 'ট্র্যাকিং শুরু করতে নিচের বাটনে ক্লিক করুন'}
-                            </div>
-                        </div>
-
-                        {/* BIG START/STOP BUTTON */}
-                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
-                            <button
-                                onClick={isTracking ? stopTracking : startTracking}
-                                style={{
-                                    width: 280,
-                                    height: 80,
-                                    borderRadius: 20,
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontSize: 22,
-                                    fontWeight: 700,
-                                    fontFamily: "'Hind Siliguri', sans-serif",
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 16,
-                                    transition: 'all 0.3s',
-                                    background: isTracking
-                                        ? 'linear-gradient(135deg, #dc2626, #b91c1c)'
-                                        : 'linear-gradient(135deg, #22c55e, #16a34a)',
-                                    color: 'white',
-                                    boxShadow: isTracking
-                                        ? '0 10px 40px rgba(220, 38, 38, 0.4)'
-                                        : '0 10px 40px rgba(34, 197, 94, 0.4)',
-                                }}
-                            >
-                                {isTracking ? (
-                                    <>
-                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                                            <rect x="6" y="6" width="12" height="12" rx="2" />
-                                        </svg>
-                                        বন্ধ করুন
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                        শুরু করুন
-                                    </>
-                                )}
-                            </button>
-                        </div>
-
-                        {/* Task Info Cards */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                            {/* Schedule */}
-                            {selectedTask.startTime && (
-                                <div style={{
-                                    background: 'rgba(30, 41, 59, 0.5)',
-                                    borderRadius: 16,
-                                    padding: 20,
-                                    border: '1px solid rgba(71, 85, 105, 0.3)'
-                                }}>
-                                    <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>সময়সূচী</div>
-                                    <div style={{ fontSize: 24, fontWeight: 700, fontFamily: 'monospace', color: '#eab308' }}>
-                                        {selectedTask.startTime} - {selectedTask.endTime || 'N/A'}
-                                    </div>
-                                    {selectedTask.scheduleDays && (
-                                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
-                                            {selectedTask.scheduleDays.map(d => getDayName(d)).join(', ')}
-                                        </div>
+                        {/* Section 1: Active/Running Tasks */}
+                        {activeTasks.length > 0 && (
+                            <Section $variant="active">
+                                <SectionHeader>
+                                    <SectionTitle $color={theme.colors.status.success}>
+                                        🟢 চলমান কাজ
+                                        <SectionCount>({activeTasks.length})</SectionCount>
+                                    </SectionTitle>
+                                    {totalRunningTime > 0 && (
+                                        <Timer seconds={totalRunningTime} size="sm" isActive={true} />
                                     )}
-                                </div>
-                            )}
+                                </SectionHeader>
+                                <TasksList>
+                                    {activeTasks.map((task) => renderTaskRow(task, 'active'))}
+                                </TasksList>
+                            </Section>
+                        )}
 
-                            {/* Billing */}
-                            <div style={{
-                                background: 'rgba(30, 41, 59, 0.5)',
-                                borderRadius: 16,
-                                padding: 20,
-                                border: '1px solid rgba(71, 85, 105, 0.3)'
-                            }}>
-                                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>বিলিং</div>
-                                <div style={{ fontSize: 20, fontWeight: 700, color: '#22c55e' }}>
-                                    {selectedTask.billingType === 'HOURLY' && selectedTask.hourlyRate
-                                        ? `৳${selectedTask.hourlyRate}/ঘন্টা`
-                                        : selectedTask.fixedPrice
-                                            ? `৳${selectedTask.fixedPrice}`
-                                            : 'N/A'}
-                                </div>
-                            </div>
+                        {/* Section 2: Upcoming Tasks */}
+                        {upcomingTasks.length > 0 && (
+                            <Section $variant="upcoming">
+                                <SectionHeader>
+                                    <SectionTitle>
+                                        ⏰ আপকামিং কাজ
+                                        <SectionCount>({upcomingTasks.length})</SectionCount>
+                                    </SectionTitle>
+                                </SectionHeader>
+                                <TasksList>
+                                    {upcomingTasks.map((task) => renderTaskRow(task, 'upcoming'))}
+                                </TasksList>
+                            </Section>
+                        )}
 
-                            {/* Status */}
-                            <div style={{
-                                background: 'rgba(30, 41, 59, 0.5)',
-                                borderRadius: 16,
-                                padding: 20,
-                                border: '1px solid rgba(71, 85, 105, 0.3)'
-                            }}>
-                                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>অবস্থা</div>
-                                <div style={{
-                                    display: 'inline-block',
-                                    padding: '6px 14px',
-                                    borderRadius: 20,
-                                    fontSize: 13,
-                                    fontWeight: 600,
-                                    background: selectedTask.status === 'IN_PROGRESS' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)',
-                                    color: selectedTask.status === 'IN_PROGRESS' ? '#22c55e' : '#eab308'
-                                }}>
-                                    {selectedTask.status === 'IN_PROGRESS' ? 'চলমান' : selectedTask.status === 'DONE' ? 'সম্পন্ন' : 'অপেক্ষমাণ'}
-                                </div>
-                            </div>
-                        </div>
+                        {/* Section 3: Completed Tasks */}
+                        {completedTasks.length > 0 && (
+                            <Section $variant="completed">
+                                <SectionHeader>
+                                    <SectionTitle $color={theme.colors.status.error}>
+                                        ✅ সম্পন্ন কাজ
+                                        <SectionCount>({completedTasks.length})</SectionCount>
+                                    </SectionTitle>
+                                </SectionHeader>
+                                <TasksList>
+                                    {completedTasks.map((task) => renderTaskRow(task, 'completed'))}
+                                </TasksList>
+                            </Section>
+                        )}
+
+                        {/* If all sections empty (search filter cleared everything) */}
+                        {activeTasks.length === 0 && upcomingTasks.length === 0 && completedTasks.length === 0 && (
+                            <SectionEmptyMessage>
+                                কোনো টাস্ক পাওয়া যায়নি
+                            </SectionEmptyMessage>
+                        )}
                     </>
                 )}
-            </div>
-
-            {/* CSS Animation */}
-            <style>{`
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; transform: scale(1); }
-                    50% { opacity: 0.5; transform: scale(1.1); }
-                }
-                ::-webkit-scrollbar { width: 6px; }
-                ::-webkit-scrollbar-track { background: transparent; }
-                ::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.5); border-radius: 3px; }
-                ::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 0.8); }
-            `}</style>
-        </div>
+            </Content>
+        </PageWrapper>
     );
 };
 

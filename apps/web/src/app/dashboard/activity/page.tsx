@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '@/context/AuthContext';
 import { io, Socket } from 'socket.io-client';
-import { Clock, MousePointer, Keyboard, X, ChevronDown, ChevronUp, Layers, CheckCircle, Circle, Calendar } from 'lucide-react';
+import { Clock, MousePointer, Keyboard, X, ChevronDown, ChevronUp, Layers, CheckCircle, Circle, Calendar, BarChart3, Camera, Eye, Monitor } from 'lucide-react';
+import Link from 'next/link';
+import ActivityTimeline from '@/components/dashboard/ActivityTimeline';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8000';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -22,6 +24,8 @@ interface LiveSession {
     taskTitle: string;
     startTime: string;
     elapsedSeconds: number;
+    currentApp?: string;
+    currentWindow?: string;
 }
 
 interface Screenshot {
@@ -33,7 +37,10 @@ interface Screenshot {
     mouseCount: number;
     user: { id: string; name: string; email: string; profileImage: string | null };
     task: { id: string; title: string };
+    subTask?: { id: string; title: string } | null;
     taskId: string | null;
+    subTaskId?: string | null;
+    deviceId?: string | null;
 }
 
 interface SubTask {
@@ -83,6 +90,17 @@ const groupScreenshotsByHour = (screenshots: Screenshot[]): Map<string, Screensh
     return groups;
 };
 
+const groupScreenshotsBySubtask = (screenshots: Screenshot[]): Map<string, { title: string; screenshots: Screenshot[] }> => {
+    const groups = new Map<string, { title: string; screenshots: Screenshot[] }>();
+    screenshots.forEach(ss => {
+        const key = ss.subTask?.id || '_no_subtask';
+        const title = ss.subTask?.title || 'সাব-টাস্ক ছাড়া';
+        if (!groups.has(key)) groups.set(key, { title, screenshots: [] });
+        groups.get(key)!.screenshots.push(ss);
+    });
+    return groups;
+};
+
 // ==========================================
 // Main Component
 // ==========================================
@@ -94,13 +112,29 @@ export default function ActivityMonitorPage() {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
+    const [activityLogs, setActivityLogs] = useState<any[]>([]); // For ActivityTimeline — prevents duplicate API call
     const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
     const [selectedScreenshot, setSelectedScreenshot] = useState<Screenshot | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [loading, setLoading] = useState(true);
     const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+    const [captureLoading, setCaptureLoading] = useState<string | null>(null);
 
     const socketRef = useRef<Socket | null>(null);
+
+    // Remote screenshot capture handler
+    const handleCaptureNow = (session: LiveSession) => {
+        if (!socketRef.current || !user?.companyId) return;
+        setCaptureLoading(session.userId);
+        socketRef.current.emit('screenshot:request-capture', {
+            targetUserId: session.userId,
+            taskId: session.taskId,
+            companyId: user.companyId,
+            requestedBy: user?.name || user?.email || 'Admin',
+        });
+        // Auto-reset loading after 15 seconds
+        setTimeout(() => setCaptureLoading(null), 15000);
+    };
 
     // Fetch Data on Date Change
     useEffect(() => {
@@ -124,6 +158,7 @@ export default function ActivityMonitorPage() {
                 if (activityRes.data.success) {
                     setScreenshots(activityRes.data.screenshots || []);
                     setTasks(activityRes.data.tasks || []);
+                    setActivityLogs(activityRes.data.activityLogs || []); // Pass to ActivityTimeline
                 }
             } catch (error) {
                 console.error("Failed to fetch data", error);
@@ -157,8 +192,13 @@ export default function ActivityMonitorPage() {
             setLiveSessions(prev => [...prev.filter(s => s.odId !== session.odId), { ...session, elapsedSeconds: 0 }]);
         });
 
-        socketRef.current.on('tracking:tick', (data: { odId: string; elapsedSeconds: number }) => {
-            setLiveSessions(prev => prev.map(s => s.odId === data.odId ? { ...s, elapsedSeconds: data.elapsedSeconds } : s));
+        socketRef.current.on('tracking:tick', (data: { odId: string; elapsedSeconds: number; currentApp?: string; currentWindow?: string }) => {
+            setLiveSessions(prev => prev.map(s => s.odId === data.odId ? {
+                ...s,
+                elapsedSeconds: data.elapsedSeconds,
+                currentApp: data.currentApp || s.currentApp,
+                currentWindow: data.currentWindow || s.currentWindow,
+            } : s));
         });
 
         socketRef.current.on('tracking:stopped', (data: { odId: string }) => {
@@ -167,6 +207,12 @@ export default function ActivityMonitorPage() {
 
         socketRef.current.on('screenshot:new', (data: any) => {
             setScreenshots(prev => [data, ...prev].slice(0, 100));
+        });
+
+        // Remote capture result
+        socketRef.current.on('screenshot:remote-result', (data: any) => {
+            setCaptureLoading(null);
+            // The screenshot will come through screenshot:new as well
         });
 
         return () => { socketRef.current?.disconnect(); };
@@ -246,10 +292,34 @@ export default function ActivityMonitorPage() {
                                 {session.userName.charAt(0)}
                             </div>
                         )}
-                        <div>
+                        <div className="min-w-0 flex-1">
                             <h3 className="font-bold text-white leading-tight">{session.userName}</h3>
                             <p className="text-xs text-green-400 font-mono mt-1">{formatTime(session.elapsedSeconds)}</p>
                             <p className="text-xs text-gray-500 truncate mt-0.5 max-w-[150px]">{session.taskTitle}</p>
+                            {session.currentApp && (
+                                <p className="text-xs text-blue-400 truncate mt-0.5 max-w-[150px]" title={session.currentWindow || session.currentApp}>
+                                    🖥️ {session.currentApp}
+                                </p>
+                            )}
+                            <div className="flex gap-2 mt-2">
+                                <button
+                                    onClick={() => handleCaptureNow(session)}
+                                    disabled={captureLoading === session.userId}
+                                    className="flex items-center gap-1 px-2 py-1 bg-yellow-600/20 hover:bg-yellow-600/40 border border-yellow-600/40 text-yellow-400 text-[10px] font-semibold rounded-md transition-all disabled:opacity-50"
+                                    title="রিমোট স্ক্রিনশট ক্যাপচার"
+                                >
+                                    <Camera size={10} />
+                                    {captureLoading === session.userId ? '...' : 'Capture'}
+                                </button>
+                                <Link
+                                    href={`/dashboard/monitoring/${session.taskId}`}
+                                    className="flex items-center gap-1 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-600/40 text-blue-400 text-[10px] font-semibold rounded-md transition-all"
+                                    title="স্মার্ট মনিটরিং পেজ"
+                                >
+                                    <Eye size={10} />
+                                    Monitor
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -286,6 +356,20 @@ export default function ActivityMonitorPage() {
                 ))}
             </div>
 
+            {/* Activity Timeline (Phase 3 - Score-based) */}
+            <div className="bg-[#1A1A1A] border border-[#333] rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <BarChart3 size={20} className="text-indigo-400" />
+                    <h2 className="text-lg font-bold text-white">Activity Score Timeline</h2>
+                    <span className="text-xs text-gray-500">5-min interval breakdown</span>
+                </div>
+                <ActivityTimeline
+                    userId={selectedEmployee || undefined}
+                    date={selectedDate}
+                    activityLogs={activityLogs}
+                />
+            </div>
+
             {/* Tasks List */}
             <div className="space-y-6">
                 {filteredTasks.length === 0 ? (
@@ -296,8 +380,6 @@ export default function ActivityMonitorPage() {
                 ) : (
                     filteredTasks.map(task => {
                         const taskScreenshots = getTaskScreenshots(task.id);
-                        const hourGroups = groupScreenshotsByHour(taskScreenshots);
-                        const isExpanded = expandedTasks.has(task.id) || true; // Default expanded for now
 
                         return (
                             <div key={task.id} className="bg-[#151515] border border-[#252525] rounded-2xl overflow-hidden transition-all hover:border-[#333]">
@@ -362,7 +444,7 @@ export default function ActivityMonitorPage() {
                                         </div>
                                     </div>
 
-                                    {/* Activity Feed */}
+                                    {/* Activity Feed — grouped by subtask */}
                                     <div className="lg:col-span-3">
                                         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Activity Screenshots</h3>
 
@@ -372,42 +454,65 @@ export default function ActivityMonitorPage() {
                                             </div>
                                         ) : (
                                             <div className="space-y-6">
-                                                {Array.from(hourGroups.entries()).map(([hourKey, shots]) => (
-                                                    <div key={hourKey}>
+                                                {Array.from(groupScreenshotsBySubtask(taskScreenshots).entries()).map(([subKey, group]) => (
+                                                    <div key={subKey}>
+                                                        {/* Subtask Header */}
                                                         <div className="flex items-center gap-3 mb-3">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                                            <span className="text-sm font-medium text-white">{formatHour(shots[0].recordedAt)}</span>
+                                                            <div className={`w-2 h-2 rounded-full ${subKey === '_no_subtask' ? 'bg-gray-500' : 'bg-purple-500'}`} />
+                                                            <span className="text-sm font-semibold text-white">{group.title}</span>
+                                                            <span className="text-xs text-gray-500">({group.screenshots.length}টি)</span>
                                                             <div className="flex-1 h-px bg-[#252525]" />
                                                         </div>
                                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                                            {shots.map(ss => (
+                                                            {group.screenshots.map(ss => (
                                                                 <div
                                                                     key={ss.id}
                                                                     onClick={() => setSelectedScreenshot(ss)}
-                                                                    className="group relative aspect-video bg-black rounded-lg overflow-hidden border border-[#333] hover:border-indigo-500 cursor-pointer transition-all hover:shadow-lg hover:shadow-indigo-500/10"
+                                                                    className="group relative bg-black rounded-lg overflow-hidden border border-[#333] hover:border-indigo-500 cursor-pointer transition-all hover:shadow-lg hover:shadow-indigo-500/10"
                                                                 >
-                                                                    <img
-                                                                        src={ss.imageUrl}
-                                                                        alt="Screenshot"
-                                                                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                                                                    />
-                                                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-end">
-                                                                        <div className="flex items-center gap-2 text-[10px] text-gray-300">
-                                                                            <span className="flex items-center gap-0.5"><Keyboard size={10} /> {ss.keyboardCount}</span>
-                                                                            <span className="flex items-center gap-0.5"><MousePointer size={10} /> {ss.mouseCount}</span>
+                                                                    {/* Screenshot Image */}
+                                                                    <div className="aspect-video relative">
+                                                                        <img
+                                                                            src={ss.imageUrl}
+                                                                            alt="Screenshot"
+                                                                            loading="lazy"
+                                                                            className="w-full h-full object-cover opacity-85 group-hover:opacity-100 transition-opacity"
+                                                                        />
+                                                                        {/* Time Badge — always visible, top-right */}
+                                                                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-black/70 rounded text-[10px] font-mono text-white backdrop-blur-sm">
+                                                                            {new Date(ss.recordedAt).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                                                         </div>
-                                                                        <div className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${ss.activityScore > 70 ? 'bg-green-500 text-black' : ss.activityScore > 40 ? 'bg-yellow-500 text-black' : 'bg-red-500 text-white'}`}>
+                                                                        {/* Activity Score — always visible, top-left */}
+                                                                        <div className={`absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold backdrop-blur-sm ${ss.activityScore > 70 ? 'bg-green-500/90 text-black' : ss.activityScore > 40 ? 'bg-yellow-500/90 text-black' : 'bg-red-500/90 text-white'}`}>
                                                                             {ss.activityScore}%
                                                                         </div>
-                                                                    </div>
-                                                                    {/* User Avatar Overlay */}
-                                                                    <div className="absolute top-2 left-2">
-                                                                        {ss.user.profileImage ? (
-                                                                            <img src={ss.user.profileImage} className="w-6 h-6 rounded-full border border-black/50" title={ss.user.name} />
-                                                                        ) : (
-                                                                            <div className="w-6 h-6 rounded-full bg-indigo-600 text-[10px] flex items-center justify-center text-white border border-black/50" title={ss.user.name}>
-                                                                                {ss.user.name.charAt(0)}
+                                                                        {/* User Avatar — bottom-left of image */}
+                                                                        <div className="absolute bottom-1.5 left-1.5">
+                                                                            {ss.user.profileImage ? (
+                                                                                <img src={ss.user.profileImage} className="w-5 h-5 rounded-full border border-black/50" title={ss.user.name} />
+                                                                            ) : (
+                                                                                <div className="w-5 h-5 rounded-full bg-indigo-600 text-[9px] flex items-center justify-center text-white border border-black/50" title={ss.user.name}>
+                                                                                    {ss.user.name.charAt(0)}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        {/* Device badge if available */}
+                                                                        {ss.deviceId && (
+                                                                            <div className="absolute bottom-1.5 right-1.5 p-1 bg-black/60 rounded backdrop-blur-sm" title={`ডিভাইস: ${ss.deviceId}`}>
+                                                                                <Monitor size={10} className="text-blue-400" />
                                                                             </div>
+                                                                        )}
+                                                                    </div>
+                                                                    {/* Info Bar — below image, always visible */}
+                                                                    <div className="px-2 py-1.5 bg-[#1A1A1A] border-t border-[#252525] flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                                                                            <span className="flex items-center gap-0.5"><Keyboard size={9} /> {ss.keyboardCount}</span>
+                                                                            <span className="flex items-center gap-0.5"><MousePointer size={9} /> {ss.mouseCount}</span>
+                                                                        </div>
+                                                                        {ss.subTask && (
+                                                                            <span className="text-[9px] text-purple-400 truncate max-w-[100px]" title={ss.subTask.title}>
+                                                                                {ss.subTask.title}
+                                                                            </span>
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -463,9 +568,26 @@ export default function ActivityMonitorPage() {
                                 <div>
                                     <label className="text-xs text-gray-500 uppercase tracking-wider font-bold">Task</label>
                                     <div className="mt-2 p-3 bg-[#202020] rounded-lg border border-[#333]">
-                                        <div className="text-sm text-gray-200 font-medium">{selectedScreenshot.task.title}</div>
+                                        <div className="text-sm text-gray-200 font-medium">{selectedScreenshot.task?.title}</div>
+                                        {selectedScreenshot.subTask && (
+                                            <div className="mt-1 text-xs text-purple-400 flex items-center gap-1">
+                                                <Layers size={10} />
+                                                {selectedScreenshot.subTask.title}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
+
+                                {/* Device Info */}
+                                {selectedScreenshot.deviceId && (
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase tracking-wider font-bold">Device</label>
+                                        <div className="mt-2 flex items-center gap-2 p-3 bg-[#202020] rounded-lg border border-[#333]">
+                                            <Monitor size={16} className="text-blue-400" />
+                                            <span className="text-xs font-mono text-gray-300">{selectedScreenshot.deviceId}</span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="p-3 bg-[#202020] rounded-lg border border-[#333] text-center">

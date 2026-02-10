@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient, BillingType, ScheduleType } from '@prisma/client';
+import prisma from '../utils/prisma';
+import { BillingType, ScheduleType } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 // ============================================================
 // HELPER: Time Overlap Validation

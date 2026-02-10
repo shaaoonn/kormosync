@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 import { grantToken, createPayment as bkashCreate, executePayment as bkashExecute } from '../utils/bkashClient';
 import { v4 as uuidv4 } from 'uuid';
 
-const prisma = new PrismaClient();
 
 export const createPayment = async (req: Request, res: Response) => {
     console.log('[Payment] createPayment called with body:', JSON.stringify(req.body));

@@ -1,0 +1,6 @@
+{
+  "watch": ["src"],
+  "ext": "ts,json",
+  "ignore": ["node_modules", "dist", ".prisma", "uploads", "*.test.ts"],
+  "delay": "2000"
+}

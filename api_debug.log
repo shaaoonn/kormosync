@@ -1,0 +1,390 @@
+2026-02-05T12:43:42.800Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-05T12:43:42.801Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-05T12:43:47.607Z ✅ FOUND 2 TASKS
+2026-02-05T14:40:00.361Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-05T14:40:00.363Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-05T14:40:05.153Z ✅ FOUND 2 TASKS
+2026-02-05T14:52:01.678Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-05T14:52:01.679Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-05T14:52:07.154Z ✅ FOUND 2 TASKS
+2026-02-05T14:52:36.020Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-05T14:52:36.021Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-05T14:52:40.100Z ✅ FOUND 2 TASKS
+2026-02-05T14:55:50.391Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-05T14:55:50.392Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-05T14:55:52.462Z ✅ FOUND 2 TASKS
+2026-02-05T14:56:39.688Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-05T14:56:39.689Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-05T14:56:41.747Z ✅ FOUND 2 TASKS
+2026-02-05T18:07:00.678Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-05T18:07:00.679Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-05T18:07:06.826Z ✅ FOUND 2 TASKS
+2026-02-05T18:26:03.163Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-05T18:26:03.164Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-05T18:26:10.495Z ✅ FOUND 2 TASKS
+2026-02-06T04:49:00.371Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T04:49:00.374Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T04:49:04.956Z ✅ FOUND 2 TASKS
+2026-02-06T06:21:35.151Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T06:21:35.152Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T06:21:39.864Z ✅ FOUND 2 TASKS
+2026-02-06T06:22:22.558Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T06:22:22.559Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T06:22:24.559Z ✅ FOUND 2 TASKS
+2026-02-06T06:23:27.033Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T06:23:27.035Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T06:23:29.037Z ✅ FOUND 2 TASKS
+2026-02-06T06:30:25.507Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T06:30:25.508Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T06:30:30.042Z ✅ FOUND 2 TASKS
+2026-02-06T06:32:50.809Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T06:32:50.810Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T06:32:52.740Z ✅ FOUND 2 TASKS
+2026-02-06T06:34:23.658Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T06:34:23.659Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T06:34:25.592Z ✅ FOUND 2 TASKS
+2026-02-06T06:42:23.575Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T06:42:23.576Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T06:42:30.146Z ✅ FOUND 2 TASKS
+2026-02-06T12:39:55.423Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T12:39:55.425Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T12:40:02.129Z ✅ FOUND 2 TASKS
+2026-02-06T13:06:26.425Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T13:06:26.426Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-06T13:06:41.151Z ✅ FOUND 2 TASKS
+2026-02-06T13:24:41.255Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-06T13:24:41.255Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-06T13:24:45.943Z ✅ FOUND 2 TASKS
+2026-02-07T05:55:45.979Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T05:55:45.980Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-07T05:55:50.519Z ✅ FOUND 2 TASKS
+2026-02-07T05:57:41.761Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T05:57:41.762Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-07T05:57:43.405Z ✅ FOUND 2 TASKS
+2026-02-07T07:29:49.004Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T07:29:49.005Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T07:29:54.472Z ✅ FOUND 2 TASKS
+2026-02-07T07:29:54.824Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T07:29:54.825Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T07:29:56.489Z ✅ FOUND 2 TASKS
+2026-02-07T07:30:02.503Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T07:30:02.503Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T07:30:04.178Z ✅ FOUND 2 TASKS
+2026-02-07T07:30:08.683Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T07:30:08.684Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T07:30:10.673Z ✅ FOUND 2 TASKS
+2026-02-07T07:30:16.568Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T07:30:16.568Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T07:30:18.386Z ✅ FOUND 2 TASKS
+2026-02-07T07:30:22.614Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T07:30:22.615Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T07:30:28.489Z ✅ FOUND 2 TASKS
+2026-02-07T07:30:31.340Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T07:30:31.340Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T07:30:33.616Z ✅ FOUND 2 TASKS
+2026-02-07T08:37:13.235Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T08:37:13.235Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T08:37:18.014Z ✅ FOUND 2 TASKS
+2026-02-07T08:37:35.258Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T08:37:35.258Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T08:37:37.291Z ✅ FOUND 2 TASKS
+2026-02-07T08:39:13.595Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T08:39:13.596Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T08:39:15.637Z ✅ FOUND 2 TASKS
+2026-02-07T09:00:36.150Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T09:00:36.150Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T09:00:40.884Z ✅ FOUND 2 TASKS
+2026-02-07T09:00:41.259Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T09:00:41.260Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T09:00:42.939Z ✅ FOUND 2 TASKS
+2026-02-07T09:39:53.394Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T09:39:53.395Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T09:39:58.133Z ✅ FOUND 2 TASKS
+2026-02-07T09:59:27.294Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T09:59:27.295Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T09:59:32.195Z ✅ FOUND 2 TASKS
+2026-02-07T12:01:27.050Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T12:01:27.050Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T12:01:31.649Z ✅ FOUND 2 TASKS
+2026-02-07T12:02:53.866Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T12:02:53.866Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T12:02:55.822Z ✅ FOUND 2 TASKS
+2026-02-07T12:03:06.145Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T12:03:06.146Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T12:03:07.898Z ✅ FOUND 2 TASKS
+2026-02-07T12:07:45.771Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T12:07:45.772Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T12:07:50.348Z ✅ FOUND 2 TASKS
+2026-02-07T12:11:52.658Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T12:11:52.659Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T12:11:54.559Z ✅ FOUND 2 TASKS
+2026-02-07T12:36:13.217Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T12:36:13.217Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T12:36:17.761Z ✅ FOUND 2 TASKS
+2026-02-07T13:35:56.021Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T13:35:56.021Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-07T13:36:04.490Z ✅ FOUND 2 TASKS
+2026-02-07T13:41:08.064Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T13:41:08.064Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T13:41:14.902Z ✅ FOUND 2 TASKS
+2026-02-07T13:42:55.485Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T13:42:55.486Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-07T13:42:57.766Z ✅ FOUND 2 TASKS
+2026-02-07T15:29:00.214Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T15:29:00.215Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T15:29:06.078Z ✅ FOUND 2 TASKS
+2026-02-07T20:24:15.193Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T20:24:15.194Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T20:24:18.655Z ✅ FOUND 2 TASKS
+2026-02-07T20:27:15.357Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T20:27:15.358Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T20:27:20.169Z ✅ FOUND 2 TASKS
+2026-02-07T20:29:08.405Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T20:29:08.405Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T20:29:10.404Z ✅ FOUND 2 TASKS
+2026-02-07T20:51:32.514Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-07T20:51:32.515Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-07T20:51:36.642Z ✅ FOUND 2 TASKS
+2026-02-08T04:40:09.440Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T04:40:09.441Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T04:40:12.883Z ✅ FOUND 2 TASKS
+2026-02-08T05:41:33.547Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T05:41:33.548Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T05:41:37.021Z ✅ FOUND 2 TASKS
+2026-02-08T10:53:28.729Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T10:53:28.730Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T10:53:32.208Z ✅ FOUND 2 TASKS
+2026-02-08T11:14:45.013Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T11:14:45.014Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-08T11:14:48.461Z ✅ FOUND 2 TASKS
+2026-02-08T11:17:58.820Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T11:17:58.821Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-08T11:18:02.210Z ✅ FOUND 2 TASKS
+2026-02-08T11:21:31.733Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T11:21:31.733Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-08T11:21:35.183Z ✅ FOUND 2 TASKS
+2026-02-08T11:44:56.982Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T11:44:56.982Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T11:45:01.929Z ✅ FOUND 2 TASKS
+2026-02-08T11:46:41.480Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T11:46:41.481Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T11:46:44.967Z ✅ FOUND 2 TASKS
+2026-02-08T11:52:13.423Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T11:52:13.424Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T11:52:18.607Z ✅ FOUND 2 TASKS
+2026-02-08T16:57:16.093Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T16:57:16.096Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T16:57:19.667Z ✅ FOUND 2 TASKS
+2026-02-08T16:57:51.713Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T16:57:51.713Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T16:57:55.292Z ✅ FOUND 2 TASKS
+2026-02-08T17:29:52.795Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T17:29:52.796Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T17:29:56.238Z ✅ FOUND 2 TASKS
+2026-02-08T17:51:09.296Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T17:51:09.297Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T17:51:14.347Z ✅ FOUND 2 TASKS
+2026-02-08T18:04:04.535Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T18:04:04.536Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T18:04:07.707Z ✅ FOUND 2 TASKS
+2026-02-08T18:14:20.634Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T18:14:20.634Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T18:14:25.617Z ✅ FOUND 2 TASKS
+2026-02-08T19:07:52.248Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T19:07:52.249Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T19:07:55.736Z ✅ FOUND 2 TASKS
+2026-02-08T19:30:46.100Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-08T19:30:46.101Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-08T19:30:49.722Z ✅ FOUND 2 TASKS
+2026-02-09T03:24:14.270Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T03:24:14.271Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T03:24:17.679Z ✅ FOUND 2 TASKS
+2026-02-09T03:25:29.740Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T03:25:29.741Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T03:25:42.316Z ✅ FOUND 2 TASKS
+2026-02-09T03:29:25.705Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T03:29:25.706Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-09T03:29:30.615Z ✅ FOUND 2 TASKS
+2026-02-09T03:51:36.354Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T03:51:36.355Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T03:51:39.993Z ✅ FOUND 2 TASKS
+2026-02-09T04:23:56.168Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T04:23:56.169Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-09T04:23:59.583Z ✅ FOUND 2 TASKS
+2026-02-09T04:54:46.120Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T04:54:46.121Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-09T05:31:59.730Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T05:31:59.731Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-09T05:32:01.182Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T05:32:01.183Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T05:32:03.486Z ✅ FOUND 2 TASKS
+2026-02-09T05:32:04.824Z ✅ FOUND 2 TASKS
+2026-02-09T05:40:11.510Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T05:40:11.511Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T05:41:13.790Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T05:41:13.790Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T05:42:17.424Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T05:42:17.424Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:06:16.811Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:06:16.811Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:06:20.448Z ✅ FOUND 2 TASKS
+2026-02-09T06:10:03.317Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:10:03.317Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:10:08.475Z ✅ FOUND 2 TASKS
+2026-02-09T06:14:57.736Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:14:57.736Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:15:59.902Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:15:59.902Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:29:18.486Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:29:18.486Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:29:21.613Z ✅ FOUND 2 TASKS
+2026-02-09T06:30:39.275Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:30:39.275Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:30:42.739Z ✅ FOUND 2 TASKS
+2026-02-09T06:33:11.102Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:33:11.102Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:33:38.816Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:33:38.817Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:34:26.237Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:34:26.238Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:34:30.032Z ✅ FOUND 2 TASKS
+2026-02-09T06:34:36.249Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:34:36.250Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:34:40.698Z ✅ FOUND 2 TASKS
+2026-02-09T06:34:40.703Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:34:40.704Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:34:42.287Z ✅ FOUND 2 TASKS
+2026-02-09T06:36:04.422Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:36:04.422Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T06:37:05.776Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T06:37:05.776Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T07:14:48.060Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T07:14:48.061Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T07:14:51.581Z ✅ FOUND 2 TASKS
+2026-02-09T07:15:07.335Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T07:15:07.335Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T07:15:10.830Z ✅ FOUND 2 TASKS
+2026-02-09T07:56:37.465Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T07:56:37.465Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T07:56:40.956Z ✅ FOUND 2 TASKS
+2026-02-09T07:56:59.873Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T07:56:59.874Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T07:57:03.485Z ✅ FOUND 2 TASKS
+2026-02-09T08:49:56.763Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T08:49:56.764Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T08:50:15.449Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T08:50:15.449Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T08:50:20.749Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T08:50:20.749Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T08:50:34.455Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T08:50:34.456Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T08:50:37.362Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T08:50:37.362Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:17:15.580Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:17:15.581Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:17:18.991Z ✅ FOUND 2 TASKS
+2026-02-09T09:20:30.239Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:20:30.240Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:20:32.314Z ✅ FOUND 2 TASKS
+2026-02-09T09:27:24.163Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:27:24.164Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-09T09:27:28.102Z ✅ FOUND 2 TASKS
+2026-02-09T09:29:31.279Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:29:31.280Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:29:48.387Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:29:48.388Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:30:03.341Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:30:03.342Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:30:09.580Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:30:09.581Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:30:20.061Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:30:20.061Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:30:26.995Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:30:26.996Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:30:39.248Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:30:39.249Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:45:14.845Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:45:14.846Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:45:18.090Z ✅ FOUND 2 TASKS
+2026-02-09T09:46:13.637Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T09:46:13.637Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T09:46:15.584Z ✅ FOUND 2 TASKS
+2026-02-09T10:19:44.471Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T10:19:44.472Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T10:19:47.936Z ✅ FOUND 2 TASKS
+2026-02-09T10:21:10.835Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T10:21:10.835Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T10:21:12.903Z ✅ FOUND 2 TASKS
+2026-02-09T10:21:51.161Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T10:21:51.162Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T10:21:53.239Z ✅ FOUND 2 TASKS
+2026-02-09T10:22:01.530Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T10:22:01.530Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T10:22:03.262Z ✅ FOUND 2 TASKS
+2026-02-09T10:22:52.489Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T10:22:52.490Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T10:22:54.571Z ✅ FOUND 2 TASKS
+2026-02-09T10:23:19.794Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T10:23:19.795Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T10:23:21.858Z ✅ FOUND 2 TASKS
+2026-02-09T10:23:38.759Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T10:23:38.759Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T10:23:40.820Z ✅ FOUND 2 TASKS
+2026-02-09T10:29:32.185Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T10:29:32.186Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-09T10:29:36.030Z ✅ FOUND 2 TASKS
+2026-02-09T11:53:13.905Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T11:53:13.906Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T11:53:17.153Z ✅ FOUND 2 TASKS
+2026-02-09T11:59:45.905Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T11:59:45.906Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T11:59:49.173Z ✅ FOUND 2 TASKS
+2026-02-09T12:00:18.195Z 🔍 FETCHING TASKS FOR USER: shaaoonn@gmail.com (OWNER) ID: c81772d5-bb72-4fed-900b-b13fac946018 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:00:18.195Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1"}
+2026-02-09T12:00:20.492Z ✅ FOUND 2 TASKS
+2026-02-09T12:03:38.890Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:03:38.890Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:03:42.086Z ✅ FOUND 2 TASKS
+2026-02-09T12:13:46.252Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:13:46.253Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:13:50.913Z ✅ FOUND 2 TASKS
+2026-02-09T12:15:21.727Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:15:21.728Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:15:25.484Z ✅ FOUND 2 TASKS
+2026-02-09T12:17:48.137Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:17:48.138Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:17:52.807Z ✅ FOUND 2 TASKS
+2026-02-09T12:32:43.894Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:32:43.895Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:32:56.909Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:32:56.909Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:33:03.774Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:33:03.775Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:33:13.953Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:33:13.953Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:33:57.214Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:33:57.215Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-09T12:34:14.198Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-09T12:34:14.198Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T04:37:01.293Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-10T04:37:01.293Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T04:37:04.689Z ✅ FOUND 2 TASKS
+2026-02-10T04:37:04.704Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-10T04:37:04.705Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T04:37:06.363Z ✅ FOUND 2 TASKS
+2026-02-10T04:39:22.287Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-10T04:39:22.288Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T04:39:25.919Z ✅ FOUND 2 TASKS
+2026-02-10T04:39:29.611Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-10T04:39:29.611Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T04:39:31.264Z ✅ FOUND 2 TASKS
+2026-02-10T05:49:09.443Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-10T05:49:09.443Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T05:49:12.773Z ✅ FOUND 2 TASKS
+2026-02-10T05:58:13.043Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-10T05:58:13.043Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T05:58:29.891Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-10T05:58:29.892Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T06:13:00.982Z 🔍 FETCHING TASKS FOR USER: ejobsit.com@gmail.com (EMPLOYEE) ID: 23999d76-7abd-412a-bd47-6a4561fc1ed2 Company: 0fb77b65-ba28-4ee6-8dd1-79bc6301fea1
+2026-02-10T06:13:00.983Z 🔍 WHERE CLAUSE: {"companyId":"0fb77b65-ba28-4ee6-8dd1-79bc6301fea1","assignees":{"some":{"id":"23999d76-7abd-412a-bd47-6a4561fc1ed2"}}}
+2026-02-10T06:13:04.327Z ✅ FOUND 2 TASKS

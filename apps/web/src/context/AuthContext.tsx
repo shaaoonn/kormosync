@@ -3,6 +3,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { setupGlobalAxiosInterceptors } from '@/lib/axiosSetup';
+
+// Setup global axios interceptors (auto-token + 401 refresh+retry)
+// This runs once when this module loads — covers ALL 26+ files using raw axios
+setupGlobalAxiosInterceptors();
 
 interface ExtendedUser {
     uid: string;
@@ -18,6 +23,7 @@ interface AuthContextType {
     firebaseUser: FirebaseUser | null;
     token: string | null;
     loading: boolean;
+    authLoading: boolean;
     logout: () => Promise<void>;
 }
 
@@ -26,6 +32,7 @@ const AuthContext = createContext<AuthContextType>({
     firebaseUser: null,
     token: null,
     loading: true,
+    authLoading: true,
     logout: async () => { },
 });
 
@@ -45,10 +52,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     const idToken = await fbUser.getIdToken();
                     setToken(idToken);
 
-                    // Fetch user details from backend
+                    // Fetch user details from backend (10s timeout to prevent infinite hang)
+                    const controller = new AbortController();
+                    const fetchTimeout = setTimeout(() => controller.abort(), 10000);
                     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
-                        headers: { Authorization: `Bearer ${idToken}` }
+                        headers: { Authorization: `Bearer ${idToken}` },
+                        signal: controller.signal,
                     });
+                    clearTimeout(fetchTimeout);
 
                     if (res.ok) {
                         const data = await res.json();
@@ -77,6 +88,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return () => unsubscribe();
     }, []);
 
+    // ============================================================
+    // Periodic Token Refresh — Firebase ID tokens expire after 60 minutes
+    // Force refresh every 50 minutes to prevent 401 errors
+    // ============================================================
+    useEffect(() => {
+        const TOKEN_REFRESH_INTERVAL = 50 * 60 * 1000; // 50 minutes
+        const interval = setInterval(async () => {
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+                try {
+                    const freshToken = await currentUser.getIdToken(true); // force refresh
+                    setToken(freshToken);
+                    console.log('[AUTH] Token refreshed successfully');
+                } catch (e) {
+                    console.error('[AUTH] Token refresh failed:', e);
+                }
+            }
+        }, TOKEN_REFRESH_INTERVAL);
+
+        return () => clearInterval(interval);
+    }, []);
+
     const logout = async () => {
         await auth.signOut();
         setUser(null);
@@ -84,7 +117,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, firebaseUser, token, loading, logout }}>
+        <AuthContext.Provider value={{ user, firebaseUser, token, loading, authLoading: loading, logout }}>
             {children}
         </AuthContext.Provider>
     );

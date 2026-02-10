@@ -2,20 +2,21 @@ import express, { Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 import { authenticateUser } from '../middlewares/authMiddleware';
 import { uploadToMinio, getSignedViewUrl } from '../utils/minioClient';
+import { calculateActivityScore } from '../services/activityScoreService';
 
-const prisma = new PrismaClient();
 const router = express.Router();
 
 // Configure disk storage for general uploads
 // Configure memory storage for all uploads (to pass buffer to MinIO)
 const memoryStorage = multer.memoryStorage();
 
+// Set hard ceiling to 1GB — actual limit enforced per subscription after upload
 const upload = multer({
     storage: memoryStorage,
-    limits: { fileSize: 100 * 1024 * 1024 } // 100MB per file
+    limits: { fileSize: 1024 * 1024 * 1024 } // 1GB hard ceiling
 });
 
 const screenshotUpload = multer({
@@ -35,23 +36,40 @@ router.post('/', authenticateUser, upload.single('file'), async (req: Request, r
         const user = req.user;
         const fileSizeMB = req.file.size / (1024 * 1024);
 
-        // Check storage limit (2GB = 2048MB)
+        // Dynamic per-file limit based on subscription
         if (user?.companyId) {
             const company = await prisma.company.findUnique({
                 where: { id: user.companyId },
-                select: { storageUsed: true, storageLimit: true }
+                select: { storageUsed: true, storageLimit: true, subscriptionStatus: true }
             });
 
-            if (company && (company.storageUsed + fileSizeMB) > company.storageLimit) {
-                res.status(403).json({ error: `Storage Limit Reached (${company.storageLimit}MB). Used: ${company.storageUsed.toFixed(1)}MB` });
-                return;
+            if (company) {
+                // Free users: 10MB per file, Paid users: 1GB per file
+                const maxFileSizeMB = company.subscriptionStatus === 'INACTIVE' ? 10 : 1024;
+                if (fileSizeMB > maxFileSizeMB) {
+                    res.status(413).json({
+                        error: `ফাইল সাইজ সীমা ছাড়িয়ে গেছে। সর্বোচ্চ ${maxFileSizeMB}MB আপলোড করা যাবে।`,
+                        maxSizeMB: maxFileSizeMB,
+                        isPaidFeature: company.subscriptionStatus === 'INACTIVE',
+                    });
+                    return;
+                }
+
+                // Check total storage quota
+                if ((company.storageUsed + fileSizeMB) > company.storageLimit) {
+                    res.status(403).json({
+                        error: `স্টোরেজ সীমা ছাড়িয়ে গেছে (${company.storageLimit}MB)। ব্যবহৃত: ${company.storageUsed.toFixed(1)}MB`,
+                        quotaExceeded: true,
+                    });
+                    return;
+                }
+
+                // Update storage used
+                await prisma.company.update({
+                    where: { id: user.companyId },
+                    data: { storageUsed: { increment: fileSizeMB } }
+                });
             }
-
-            // Update storage used
-            await prisma.company.update({
-                where: { id: user.companyId },
-                data: { storageUsed: { increment: fileSizeMB } }
-            });
         }
 
         // Upload to MinIO (using 'uploads' folder)
@@ -96,38 +114,89 @@ router.post('/screenshot', authenticateUser, screenshotUpload.single('image'), a
     try {
         // @ts-ignore
         const user = req.user;
-        const { taskId, activityScore } = req.body; // metadata from FormData
+        const { taskId, keystrokes, mouseClicks, activeSeconds, capturedAt } = req.body;
 
-        // Generate a unique filename for MinIO (handled inside uploadToMinio for screenshots logic somewhat, but we pass raw name)
-        // But our new logic expects fileName. Let's pass original name.
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const fileName = `${uniqueSuffix}${path.extname(req.file.originalname)}`;
-
-        // Pass 'screenshots' as folder
-        const imageUrl = await uploadToMinio(req.file.buffer, fileName, req.file.mimetype, 'screenshots');
-
+        console.log('📸 Screenshot Upload via /api/upload/screenshot');
+        console.log('   User ID:', user?.id, '| Task ID:', taskId);
+        console.log('   File:', req.file.size, 'bytes');
 
         if (!user || !user.id) {
             res.status(401).json({ error: 'Unauthorized' });
             return;
         }
 
-        // Create Screenshot Record
+        // Check company storage quota
+        if (user.companyId) {
+            const company = await prisma.company.findUnique({
+                where: { id: user.companyId },
+                select: { storageUsed: true, storageLimit: true }
+            });
+            const fileSizeMB = req.file.size / (1024 * 1024);
+            if (company && (company.storageUsed + fileSizeMB) > company.storageLimit) {
+                res.status(403).json({
+                    success: false,
+                    quotaExceeded: true,
+                    message: `স্টোরেজ সীমা ছাড়িয়ে গেছে (${company.storageLimit}MB)।`,
+                });
+                return;
+            }
+            await prisma.company.update({
+                where: { id: user.companyId },
+                data: { storageUsed: { increment: fileSizeMB } }
+            });
+        }
+
+        // Generate unique filename & upload to MinIO
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const fileName = `${uniqueSuffix}${path.extname(req.file.originalname || '.png')}`;
+        const fileKey = await uploadToMinio(req.file.buffer, fileName, req.file.mimetype, 'screenshots');
+
+        // Calculate activity score
+        const parsedKeystrokes = parseInt(keystrokes || '0') || 0;
+        const parsedClicks = parseInt(mouseClicks || '0') || 0;
+        const parsedActiveSeconds = parseInt(activeSeconds || '300') || 300;
+        const intervalMinutes = Math.max(1, Math.ceil(parsedActiveSeconds / 60)) || 5;
+        const { score: activityScore } = calculateActivityScore(
+            parsedActiveSeconds, parsedKeystrokes, parsedClicks, 0, intervalMinutes
+        );
+
+        // Create Screenshot Record with ALL data
         const screenshot = await prisma.screenshot.create({
             data: {
                 userId: user.id,
-                screenshotPath: imageUrl, // Variable name from S3 upload is still 'imageUrl' (fileKey), mapping to DB field 'screenshotPath'
-                activityScore: activityScore ? parseInt(activityScore) : 0,
-                // taskId: taskId // Schema doesn't have taskId in Screenshot model yet? 
-                // Let's check schema. If not, we just skip it or link it via relation if possible.
-                // The current schema has `userId`, `imageUrl`, `activityScore`, `capturedAt`.
-                // It does NOT have `taskId`. I'll skip taskId for now or we need to migrate DB.
-                // User asked to "Log: Call `/api/timelogs`". Screenshot usually links to a task.
-                // For now, I will just save the screenshot record.
+                taskId: taskId || null,
+                screenshotPath: fileKey,
+                activityScore,
+                keyboardCount: parsedKeystrokes,
+                mouseCount: parsedClicks,
+                activeSeconds: parsedActiveSeconds,
+                recordedAt: capturedAt ? new Date(capturedAt) : new Date(),
             }
         });
 
-        res.json(screenshot);
+        // Emit socket event for real-time update
+        const io = (req.app as any).get('io');
+        if (io && user.companyId) {
+            io.to(`company:${user.companyId}`).emit('screenshot:new', {
+                id: screenshot.id,
+                imageUrl: await getSignedViewUrl(fileKey),
+                recordedAt: screenshot.recordedAt,
+                keyboardCount: screenshot.keyboardCount,
+                mouseCount: screenshot.mouseCount,
+                activityScore: screenshot.activityScore,
+            });
+        }
+
+        console.log('✅ Screenshot saved:', screenshot.id, '| Score:', activityScore);
+
+        res.json({
+            success: true,
+            screenshot: {
+                id: screenshot.id,
+                imageUrl: fileKey,
+                activityScore,
+            }
+        });
 
     } catch (error) {
         console.error("Screenshot Upload Error:", error);

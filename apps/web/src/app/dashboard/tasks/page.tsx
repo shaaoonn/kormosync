@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, User, Calendar, Clock, UserPlus, X, Check } from "lucide-react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
+import toast from "react-hot-toast";
 
 interface Assignee {
     id: string;
@@ -17,11 +18,19 @@ interface Task {
     id: string;
     title: string;
     priority: string;
+    status: string;
     isDraft: boolean;
+    isActive?: boolean;
     deadline: string | null;
     createdAt: string;
     creator: { name: string | null; email: string | null };
     assignees: Assignee[];
+    // Phase 9 fields
+    isRecurring?: boolean;
+    recurringType?: string;
+    maxBudget?: number | null;
+    allowOvertime?: boolean;
+    reviewerId?: string | null;
 }
 
 interface Member {
@@ -121,7 +130,7 @@ export default function TasksPage() {
             setShowAssignModal(false);
             fetchTasks();
         } catch (error) {
-            alert("Failed to assign employees");
+            toast.error("Failed to assign employees");
         } finally {
             setAssigning(false);
         }
@@ -186,6 +195,31 @@ export default function TasksPage() {
                                         </span>
                                         {task.isDraft && (
                                             <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Draft</span>
+                                        )}
+                                        {task.isActive === false && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                                                বন্ধ
+                                            </span>
+                                        )}
+                                        {task.isRecurring && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                                                🔄 {task.recurringType === 'DAILY' ? 'দৈনিক' : task.recurringType === 'WEEKLY' ? 'সাপ্তাহিক' : 'মাসিক'}
+                                            </span>
+                                        )}
+                                        {task.maxBudget && task.maxBudget > 0 && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                                💰 ৳{task.maxBudget.toLocaleString()}
+                                            </span>
+                                        )}
+                                        {task.allowOvertime && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                                ⏰ OT
+                                            </span>
+                                        )}
+                                        {task.status === 'REVIEW' && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                                                🔍 রিভিউ
+                                            </span>
                                         )}
                                     </div>
                                     <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 ml-12">

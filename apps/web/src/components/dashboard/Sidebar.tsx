@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import {
     Home,
     CheckSquare,
@@ -11,11 +10,12 @@ import {
     Settings,
     LogOut,
     Activity,
-    UserPlus
+    UserPlus,
+    CalendarDays,
+    ClipboardCheck
 } from "lucide-react";
-import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import { useAuth } from "@/context/AuthContext";
 
 const adminMenuItems = [
     { name: "Overview", href: "/dashboard", icon: Home },
@@ -23,6 +23,8 @@ const adminMenuItems = [
     { name: "Activity Log", href: "/dashboard/activity", icon: Activity },
     { name: "Employees", href: "/dashboard/employees", icon: Users },
     { name: "Find Freelancers", href: "/dashboard/freelancers", icon: UserPlus },
+    { name: "Leave Mgmt", href: "/dashboard/leave", icon: CalendarDays },
+    { name: "Attendance", href: "/dashboard/attendance", icon: ClipboardCheck },
     { name: "Payroll", href: "/dashboard/payroll", icon: DollarSign },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
@@ -31,6 +33,7 @@ const employeeMenuItems = [
     { name: "Overview", href: "/dashboard", icon: Home },
     { name: "My Tasks", href: "/dashboard/tasks", icon: CheckSquare },
     { name: "My Activity", href: "/dashboard/activity", icon: Activity },
+    { name: "My Leave", href: "/dashboard/leave", icon: CalendarDays },
 ];
 
 const freelancerMenuItems = [
@@ -46,36 +49,11 @@ const commonMenuItems = [
 export default function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
-    const [role, setRole] = useState<string>("EMPLOYEE");
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchRole = async () => {
-            try {
-                const token = await auth.currentUser?.getIdToken();
-                if (token) {
-                    const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/sync`, {}, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    setRole(res.data.user?.role || "EMPLOYEE");
-                }
-            } catch (error) {
-                console.error("Failed to fetch role:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) fetchRole();
-            else setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
+    const { user, loading, logout } = useAuth();
+    const role = user?.role || "EMPLOYEE";
 
     const handleLogout = async () => {
-        await auth.signOut();
+        await logout();
         router.push("/");
     };
 

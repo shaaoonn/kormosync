@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, X, Video, StopCircle, CheckCircle, Save, Send, Plus, Clock, Calendar, AlertTriangle, Trash2, GripVertical, Users, User, Layers, FileText, Link2, ChevronUp, ChevronDown } from "lucide-react";
+import { Upload, X, Video, StopCircle, CheckCircle, Save, Send, Plus, Clock, Calendar, AlertTriangle, Trash2, GripVertical, Users, User, Layers, FileText, Link2, ChevronUp, ChevronDown, Repeat, DollarSign, UserCheck } from "lucide-react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
+import toast from "react-hot-toast";
 
 // ============================================================
 // Task Item Interface (No "Sub" prefix)
@@ -21,6 +22,7 @@ interface TaskItem {
     scheduleDays: number[];
     startTime?: string;
     endTime?: string;
+    allowOvertime?: boolean;
     attachment?: string;
     forceSchedule?: boolean;
 }
@@ -168,7 +170,39 @@ export default function CreateTaskForm() {
     const [singleScheduleDays, setSingleScheduleDays] = useState<number[]>([]);
     const [singleStartTime, setSingleStartTime] = useState('');
     const [singleEndTime, setSingleEndTime] = useState('');
+    const [singleAllowOvertime, setSingleAllowOvertime] = useState(false);
     const [screenshotInterval, setScreenshotInterval] = useState(5); // Default 5 min
+    const [screenshotEnabled, setScreenshotEnabled] = useState(true);
+    const [activityEnabled, setActivityEnabled] = useState(true);
+
+    const [allowRemoteCapture, setAllowRemoteCapture] = useState(true);
+
+    // Recurring Task
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [recurringType, setRecurringType] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('DAILY');
+    const [recurringEndDate, setRecurringEndDate] = useState('');
+    const [recurringCount, setRecurringCount] = useState<number | undefined>();
+
+    // Budget
+    const [maxBudget, setMaxBudget] = useState<number | undefined>();
+
+    // Reviewer
+    const [reviewerId, setReviewerId] = useState('');
+
+    // Phase 10: Employee completion & break
+    const [employeeCanComplete, setEmployeeCanComplete] = useState(true);
+    const [breakReminderEnabled, setBreakReminderEnabled] = useState(false);
+    const [breakAfterHours, setBreakAfterHours] = useState(2);
+
+    // Advanced Settings
+    const [monitoringMode, setMonitoringMode] = useState<'TRANSPARENT' | 'STEALTH'>('TRANSPARENT');
+    const [manualAllowedApps, setManualAllowedApps] = useState('');
+    const [activityThreshold, setActivityThreshold] = useState(40);
+    const [penaltyEnabled, setPenaltyEnabled] = useState(false);
+    const [penaltyType, setPenaltyType] = useState('');
+    const [penaltyThresholdMins, setPenaltyThresholdMins] = useState(15);
+    const [resourceLinks, setResourceLinks] = useState<string[]>(['']);
+    const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Task Items State (for BUNDLE mode, max 10)
     const [taskItems, setTaskItems] = useState<TaskItem[]>([]);
@@ -213,7 +247,7 @@ export default function CreateTaskForm() {
     // ============================================================
     const addTaskItem = () => {
         if (taskItems.length >= 10) {
-            alert("সর্বোচ্চ ১০টা টাস্ক যুক্ত করা যাবে!");
+            toast.error("সর্বোচ্চ ১০টা টাস্ক যুক্ত করা যাবে!");
             return;
         }
         const newItem: TaskItem = {
@@ -321,7 +355,7 @@ export default function CreateTaskForm() {
         if (!files) return;
         const file = files[0];
         if (file.size > MAX_MAIN_FILE_SIZE) {
-            alert("ফাইল সাইজ 100MB এর বেশি! Google Drive লিংক ব্যবহার করুন।");
+            toast.error("ফাইল সাইজ 100MB এর বেশি! Google Drive লিংক ব্যবহার করুন।");
             return;
         }
         const formData = new FormData();
@@ -331,9 +365,10 @@ export default function CreateTaskForm() {
             const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/upload`, formData, {
                 headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` }
             });
-            setAttachments(prev => [...prev, res.data.url]);
+            // Use 'key' for permanent storage, 'url' is signed and expires
+            setAttachments(prev => [...prev, res.data.key || res.data.url]);
         } catch (error: any) {
-            alert(error.response?.data?.error || "আপলোড ব্যর্থ");
+            toast.error(error.response?.data?.error || "আপলোড ব্যর্থ");
         }
     };
 
@@ -341,7 +376,7 @@ export default function CreateTaskForm() {
         if (!files) return;
         const file = files[0];
         if (file.size > MAX_SUBTASK_FILE_SIZE) {
-            alert("টাস্কের ফাইল সাইজ 20MB এর বেশি!\n\n💡 বড় ফাইল: মূল টাস্কে আপলোড করুন বা Google Drive লিংক দিন");
+            toast.error("টাস্কের ফাইল সাইজ 20MB এর বেশি!\n\n💡 বড় ফাইল: মূল টাস্কে আপলোড করুন বা Google Drive লিংক দিন");
             return;
         }
         setUploadingTaskId(taskId);
@@ -352,9 +387,10 @@ export default function CreateTaskForm() {
             const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/upload`, formData, {
                 headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` }
             });
-            updateTaskItem(taskId, 'attachment', res.data.url);
+            // Use 'key' for permanent storage, 'url' is signed and expires
+            updateTaskItem(taskId, 'attachment', res.data.key || res.data.url);
         } catch (error: any) {
-            alert(error.response?.data?.error || "আপলোড ব্যর্থ");
+            toast.error(error.response?.data?.error || "আপলোড ব্যর্থ");
         } finally {
             setUploadingTaskId(null);
         }
@@ -382,7 +418,7 @@ export default function CreateTaskForm() {
             timerRef.current = setInterval(() => {
                 setRecordingTime(prev => { if (prev >= 300) { stopRecording(); return prev; } return prev + 1; });
             }, 1000);
-        } catch (err) { alert("রেকর্ডিং বাতিল বা ত্রুটি"); }
+        } catch (err) { toast.error("রেকর্ডিং বাতিল বা ত্রুটি"); }
     };
 
     const stopRecording = () => {
@@ -395,14 +431,14 @@ export default function CreateTaskForm() {
     // Save/Publish
     // ============================================================
     const handleSave = async (publishStatus: 'DRAFT' | 'PUBLISHED') => {
-        if (!title.trim()) { alert("টাস্কের নাম দিন!"); return; }
+        if (!title.trim()) { toast.error("টাস্কের নাম দিন!"); return; }
         const unresolvedOverlaps = Object.keys(overlapWarnings).filter(id => {
             const ti = taskItems.find(t => t.id === id);
             return ti && !ti.forceSchedule;
         });
-        if (unresolvedOverlaps.length > 0) { alert("সময় ওভারল্যাপ ঠিক করুন!"); return; }
+        if (unresolvedOverlaps.length > 0) { toast.error("সময় ওভারল্যাপ ঠিক করুন!"); return; }
         if (publishStatus === 'PUBLISHED' && selectedAssignees.length === 0 && workerType === 'EMPLOYEE') {
-            alert("পাবলিশ করতে কমপক্ষে একজন কর্মী নির্বাচন করুন!");
+            toast.error("পাবলিশ করতে কমপক্ষে একজন কর্মী নির্বাচন করুন!");
             return;
         }
 
@@ -415,7 +451,8 @@ export default function CreateTaskForm() {
                 formData.append("file", file);
                 const token = await auth.currentUser?.getIdToken();
                 const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/upload`, formData, { headers: { Authorization: `Bearer ${token}` } });
-                videoUrl = res.data.url;
+                // Use 'key' instead of 'url' to store permanent path (url is signed and expires)
+                videoUrl = res.data.key || res.data.url;
             }
 
             const token = await auth.currentUser?.getIdToken();
@@ -427,7 +464,9 @@ export default function CreateTaskForm() {
                         title: ti.title, description: ti.description, billingType: ti.billingType,
                         fixedPrice: ti.fixedPrice, hourlyRate: ti.hourlyRate, estimatedHours: ti.estimatedHours,
                         scheduleType: ti.scheduleType, scheduleDays: ti.scheduleDays,
-                        startTime: ti.startTime, endTime: ti.endTime, orderIndex: idx
+                        startTime: ti.startTime, endTime: ti.endTime,
+                        allowOvertime: ti.billingType === 'SCHEDULED' ? (ti.allowOvertime || false) : false,
+                        orderIndex: idx
                     }))
                 }, { headers: { Authorization: `Bearer ${token}` } });
             } else {
@@ -437,17 +476,40 @@ export default function CreateTaskForm() {
                     billingType: singleBillingType,
                     fixedPrice: singleFixedPrice, hourlyRate: singleHourlyRate, estimatedHours: singleEstimatedHours,
                     scheduleDays: singleScheduleDays, startTime: singleStartTime, endTime: singleEndTime,
+                    allowOvertime: singleBillingType === 'SCHEDULED' ? singleAllowOvertime : false,
                     screenshotInterval,
+                    screenshotEnabled,
+                    activityEnabled,
+                    allowRemoteCapture,
+                    // Advanced Settings
+                    monitoringMode,
+                    manualAllowedApps: manualAllowedApps.split(',').map(s => s.trim()).filter(Boolean),
+                    activityThreshold,
+                    penaltyEnabled,
+                    penaltyType: penaltyEnabled ? penaltyType : null,
+                    penaltyThresholdMins: penaltyEnabled ? penaltyThresholdMins : 15,
+                    resourceLinks: resourceLinks.filter(l => l.trim()),
                     assigneeIds: workerType === 'EMPLOYEE' ? selectedAssignees : undefined,
-                    freelancerEmail: workerType === 'FREELANCER' ? freelancerEmail : undefined
+                    freelancerEmail: workerType === 'FREELANCER' ? freelancerEmail : undefined,
+                    // Phase 9: Recurring, Budget, Review
+                    isRecurring,
+                    recurringType: isRecurring ? recurringType : undefined,
+                    recurringEndDate: isRecurring && recurringEndDate ? recurringEndDate : undefined,
+                    recurringCount: isRecurring && recurringCount ? recurringCount : undefined,
+                    maxBudget: maxBudget || undefined,
+                    reviewerId: reviewerId || undefined,
+                    // Phase 10: Employee completion & break
+                    employeeCanComplete,
+                    breakReminderEnabled,
+                    breakAfterHours: breakReminderEnabled ? breakAfterHours : 2,
                 }, { headers: { Authorization: `Bearer ${token}` } });
             }
 
-            alert(publishStatus === 'DRAFT' ? "ড্রাফটে সেভ হয়েছে!" : "টাস্ক পাবলিশ হয়েছে!");
+            toast.success(publishStatus === 'DRAFT' ? "ড্রাফটে সেভ হয়েছে!" : "টাস্ক পাবলিশ হয়েছে!");
             router.push("/dashboard/tasks");
         } catch (error: any) {
             console.error(error);
-            alert(error.response?.data?.error || "সেভ ব্যর্থ");
+            toast.error(error.response?.data?.error || "সেভ ব্যর্থ");
         } finally {
             setLoading(false);
         }
@@ -602,7 +664,7 @@ export default function CreateTaskForm() {
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">প্রায়োরিটি</label>
                         <select className="mt-1 w-full p-2 border rounded-lg" value={priority} onChange={e => setPriority(e.target.value)}>
@@ -615,7 +677,50 @@ export default function CreateTaskForm() {
                         <label className="block text-sm font-medium text-gray-700">ডেডলাইন</label>
                         <input type="date" className="mt-1 w-full p-2 border rounded-lg" value={deadline} onChange={e => setDeadline(e.target.value)} />
                     </div>
-                    <div>
+                </div>
+
+                {/* Tracking Toggles */}
+                <div className="flex flex-col gap-3 mb-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={screenshotEnabled} onChange={e => setScreenshotEnabled(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">📷 স্ক্রিনশট রিসিভ করবে</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={activityEnabled} onChange={e => setActivityEnabled(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">📊 অ্যাক্টিভিটি ট্র্যাক করবে (কীবোর্ড/মাউস)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={allowRemoteCapture} onChange={e => setAllowRemoteCapture(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">📸 রিমোট স্ক্রিনশট ক্যাপচার (অ্যাডমিন যেকোনো সময় স্ক্রিনশট নিতে পারবে)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={employeeCanComplete} onChange={e => setEmployeeCanComplete(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">✅ কর্মী কাজ শেষ করতে পারবে (বন্ধ থাকলে শুধু এডমিন শেষ করতে পারবে)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={breakReminderEnabled} onChange={e => setBreakReminderEnabled(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">🧘 বিরতির পরামর্শ দিন</span>
+                    </label>
+                    {breakReminderEnabled && (
+                        <div className="ml-7 max-w-xs">
+                            <label className="block text-xs font-medium text-gray-600">কত ঘন্টা একটানা কাজের পর?</label>
+                            <select className="mt-1 w-full p-2 border rounded-lg text-sm" value={breakAfterHours} onChange={e => setBreakAfterHours(parseFloat(e.target.value))}>
+                                {[0.5, 1, 1.5, 2, 2.5, 3, 4].map(h => (
+                                    <option key={h} value={h}>{h} ঘন্টা</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+
+                {/* Screenshot Interval - only shown when screenshots are enabled */}
+                {screenshotEnabled && (
+                    <div className="max-w-xs">
                         <label className="block text-sm font-medium text-gray-700">📷 স্ক্রিনশট ইন্টারভাল</label>
                         <select
                             className="mt-1 w-full p-2 border rounded-lg"
@@ -627,12 +732,192 @@ export default function CreateTaskForm() {
                             ))}
                         </select>
                     </div>
-                </div>
+                )}
 
                 <div>
                     <label className="block text-sm font-medium text-gray-700">বিবরণ</label>
                     <textarea rows={4} className="mt-1 w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500"
                         placeholder="বিস্তারিত নির্দেশনা..." value={description} onChange={e => setDescription(e.target.value)} />
+                </div>
+
+                {/* Advanced Settings */}
+                <div className="border-t pt-4">
+                    <button type="button" onClick={() => setShowAdvanced(!showAdvanced)}
+                        className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-indigo-600 transition-colors">
+                        {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        Advanced Settings
+                    </button>
+
+                    {showAdvanced && (
+                        <div className="mt-4 p-5 bg-gray-50 rounded-xl border space-y-5">
+                            {/* Monitoring Mode */}
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-2">Monitoring Mode</label>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => setMonitoringMode('TRANSPARENT')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${monitoringMode === 'TRANSPARENT' ? 'bg-green-600 text-white' : 'bg-white border text-gray-600 hover:bg-gray-100'}`}>
+                                        Transparent
+                                    </button>
+                                    <button type="button" onClick={() => setMonitoringMode('STEALTH')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${monitoringMode === 'STEALTH' ? 'bg-red-600 text-white' : 'bg-white border text-gray-600 hover:bg-gray-100'}`}>
+                                        Stealth
+                                    </button>
+                                </div>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    {monitoringMode === 'STEALTH' ? 'Employee will not see tracking notifications or widget' : 'Employee can see tracking status and notifications'}
+                                </p>
+                            </div>
+
+                            {/* Allowed Apps */}
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Allowed Apps (comma separated)</label>
+                                <input type="text" placeholder="Chrome, VS Code, Figma"
+                                    className="w-full p-2 border rounded-lg text-sm"
+                                    value={manualAllowedApps} onChange={e => setManualAllowedApps(e.target.value)} />
+                            </div>
+
+                            {/* Activity Threshold */}
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Activity Threshold: {activityThreshold}%</label>
+                                <input type="range" min={0} max={100} value={activityThreshold}
+                                    onChange={e => setActivityThreshold(parseInt(e.target.value))}
+                                    className="w-full accent-indigo-600" />
+                                <div className="flex justify-between text-[10px] text-gray-400">
+                                    <span>0%</span><span>50%</span><span>100%</span>
+                                </div>
+                            </div>
+
+                            {/* Penalty Settings */}
+                            <div className="space-y-3">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={penaltyEnabled}
+                                        onChange={e => setPenaltyEnabled(e.target.checked)}
+                                        className="rounded text-indigo-600" />
+                                    <span className="text-sm text-gray-700 font-medium">Enable Penalty</span>
+                                </label>
+                                {penaltyEnabled && (
+                                    <div className="grid grid-cols-2 gap-4 pl-6">
+                                        <div>
+                                            <label className="text-xs text-gray-500 block mb-1">Penalty Type</label>
+                                            <select className="w-full p-2 border rounded-lg text-sm" value={penaltyType}
+                                                onChange={e => setPenaltyType(e.target.value)}>
+                                                <option value="">Select...</option>
+                                                <option value="DEDUCT_TIME">Deduct Time</option>
+                                                <option value="NOTIFY_ADMIN">Notify Admin</option>
+                                                <option value="PAUSE_TIMER">Pause Timer</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-500 block mb-1">Threshold (mins)</label>
+                                            <input type="number" min={1} max={120} value={penaltyThresholdMins}
+                                                onChange={e => setPenaltyThresholdMins(parseInt(e.target.value) || 15)}
+                                                className="w-full p-2 border rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Resource Links */}
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Resource Links</label>
+                                <div className="space-y-2">
+                                    {resourceLinks.map((link, idx) => (
+                                        <div key={idx} className="flex gap-2">
+                                            <input type="url" placeholder="https://..."
+                                                className="flex-1 p-2 border rounded-lg text-sm"
+                                                value={link} onChange={e => {
+                                                    const updated = [...resourceLinks];
+                                                    updated[idx] = e.target.value;
+                                                    setResourceLinks(updated);
+                                                }} />
+                                            {resourceLinks.length > 1 && (
+                                                <button type="button" onClick={() => setResourceLinks(resourceLinks.filter((_, i) => i !== idx))}
+                                                    className="text-red-500 hover:bg-red-50 p-2 rounded"><X className="w-4 h-4" /></button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    <button type="button" onClick={() => setResourceLinks([...resourceLinks, ''])}
+                                        className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                                        <Plus className="w-3 h-3" /> Add Link
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 🔄 RECURRING TASK SECTION */}
+                <div className="border-t pt-6">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={isRecurring}
+                            onChange={e => setIsRecurring(e.target.checked)}
+                            className="mt-1 w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                        />
+                        <div className="flex-1">
+                            <span className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                                <Repeat className="w-4 h-4 text-indigo-600" />
+                                🔄 রিকারিং/পুনরাবৃত্তি টাস্ক
+                            </span>
+                            <span className="block text-xs text-gray-500 mt-1">
+                                প্রতিদিন/সপ্তাহে/মাসে অটোম্যাটিক নতুন টাস্ক তৈরি হবে
+                            </span>
+                        </div>
+                    </label>
+
+                    {isRecurring && (
+                        <div className="mt-4 ml-7 p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-4">
+                            {/* Recurring Type */}
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-2">পুনরাবৃত্তির ধরন</label>
+                                <div className="flex gap-2">
+                                    {[
+                                        { value: 'DAILY', label: '📅 প্রতিদিন' },
+                                        { value: 'WEEKLY', label: '📆 সপ্তাহে' },
+                                        { value: 'MONTHLY', label: '🗓️ মাসে' },
+                                    ].map(opt => (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => setRecurringType(opt.value as any)}
+                                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                                recurringType === opt.value
+                                                    ? 'bg-indigo-600 text-white'
+                                                    : 'bg-white border text-gray-600 hover:bg-gray-100'
+                                            }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* End Criteria */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs text-gray-500 block mb-1">শেষ তারিখ (ঐচ্ছিক)</label>
+                                    <input
+                                        type="date"
+                                        className="w-full p-2 border rounded-lg text-sm"
+                                        value={recurringEndDate}
+                                        onChange={e => setRecurringEndDate(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500 block mb-1">সর্বোচ্চ সংখ্যা (ঐচ্ছিক)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="যেমন: ১০"
+                                        className="w-full p-2 border rounded-lg text-sm"
+                                        value={recurringCount || ''}
+                                        onChange={e => setRecurringCount(parseInt(e.target.value) || undefined)}
+                                        min={1}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* SINGLE TASK BILLING */}
@@ -647,6 +932,31 @@ export default function CreateTaskForm() {
                             singleScheduleDays, toggleSingleScheduleDay,
                             singleStartTime, setSingleStartTime,
                             singleEndTime, setSingleEndTime
+                        )}
+
+                        {/* Overtime Toggle — only for SCHEDULED with start/end time */}
+                        {singleBillingType === 'SCHEDULED' && singleStartTime && singleEndTime && (
+                            <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={singleAllowOvertime}
+                                        onChange={(e) => setSingleAllowOvertime(e.target.checked)}
+                                        className="mt-1 w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                                    />
+                                    <div className="flex-1">
+                                        <span className="block text-sm font-semibold text-gray-900">
+                                            ⏰ ওভারটাইম অনুমোদন
+                                        </span>
+                                        <span className="block text-xs text-gray-600 mt-1">
+                                            {singleAllowOvertime
+                                                ? "✅ নির্ধারিত সময়ের পরেও কর্মী কাজ চালিয়ে যেতে পারবে। টাইমার বন্ধ হবে না, অ্যাক্টিভিটি ও স্ক্রিনশট চলতে থাকবে।"
+                                                : "🚫 নির্ধারিত সময় শেষ হলে টাইমার স্বয়ংক্রিয়ভাবে বন্ধ হবে এবং কর্মী টাইমার শুরু করতে পারবে না।"
+                                            }
+                                        </span>
+                                    </div>
+                                </label>
+                            </div>
                         )}
                     </div>
                 )}
@@ -691,6 +1001,24 @@ export default function CreateTaskForm() {
                                         ti.scheduleDays, (day) => toggleScheduleDay(ti.id, day),
                                         ti.startTime || '', (v) => updateTaskItem(ti.id, 'startTime', v),
                                         ti.endTime || '', (v) => updateTaskItem(ti.id, 'endTime', v)
+                                    )}
+
+                                    {/* Overtime Toggle — Bundle item */}
+                                    {ti.billingType === 'SCHEDULED' && ti.startTime && ti.endTime && (
+                                        <label className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={ti.allowOvertime || false}
+                                                onChange={(e) => updateTaskItem(ti.id, 'allowOvertime', e.target.checked)}
+                                                className="mt-0.5 w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                                            />
+                                            <span className="text-xs text-gray-700">
+                                                ⏰ ওভারটাইম অনুমোদন
+                                                <span className="block text-gray-500 mt-0.5">
+                                                    {ti.allowOvertime ? "সময়ের পরেও কাজ চলবে" : "সময় শেষে অটো-বন্ধ"}
+                                                </span>
+                                            </span>
+                                        </label>
                                     )}
 
                                     {/* Overlap Warning */}
@@ -739,6 +1067,27 @@ export default function CreateTaskForm() {
                         </button>
                     </div>
                 )}
+
+                {/* 💰 BUDGET SECTION */}
+                <div className="border-t pt-6">
+                    <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                        <DollarSign className="w-5 h-5 text-green-600" /> বাজেট সীমা
+                    </h2>
+                    <div className="max-w-xs">
+                        <label className="text-xs text-gray-500 block mb-1">সর্বোচ্চ বাজেট (৳) — ঐচ্ছিক</label>
+                        <input
+                            type="number"
+                            placeholder="যেমন: 50000"
+                            className="w-full p-2 border rounded-lg"
+                            value={maxBudget || ''}
+                            onChange={e => setMaxBudget(parseFloat(e.target.value) || undefined)}
+                            min={0}
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                            সেট করলে বাজেটের কাছাকাছি গেলে ওয়ার্নিং দেখাবে
+                        </p>
+                    </div>
+                </div>
 
                 {/* Attachments */}
                 <div className="border-t pt-6 space-y-4">
@@ -795,6 +1144,30 @@ export default function CreateTaskForm() {
                                 </button>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {/* 👤 REVIEWER SELECTION */}
+                {workerType === 'EMPLOYEE' && employees.length > 0 && (
+                    <div className="border-t pt-6">
+                        <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                            <UserCheck className="w-5 h-5 text-purple-600" /> রিভিউয়ার নির্বাচন
+                        </h2>
+                        <p className="text-xs text-gray-500 mb-3">
+                            টাস্ক শেষ হলে রিভিউয়ার অনুমোদন/পরিবর্তন প্রয়োজন হবে (ঐচ্ছিক)
+                        </p>
+                        <select
+                            className="w-full max-w-sm p-2 border rounded-lg text-sm"
+                            value={reviewerId}
+                            onChange={e => setReviewerId(e.target.value)}
+                        >
+                            <option value="">কোনো রিভিউয়ার নেই</option>
+                            {employees.map(emp => (
+                                <option key={emp.id} value={emp.id}>
+                                    {emp.name || emp.email}
+                                </option>
+                            ))}
+                        </select>
                     </div>
                 )}
 

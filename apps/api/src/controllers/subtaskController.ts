@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../utils/prisma';
 import { isWithinSchedule, getScheduleDisplayStatus } from '../services/scheduleService';
 
-const prisma = new PrismaClient();
 
 // Helper to get user from request
 const getUser = (req: Request) => (req as any).user;

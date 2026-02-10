@@ -5,7 +5,8 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  turbopack: {},
+  // NOTE: turbopack: {} was removed — it conflicts with the --webpack flag in package.json dev script
+  // Having both causes HMR to break randomly, resulting in blank white pages
 };
 
 export default nextConfig;

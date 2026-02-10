@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import Link from "next/link";
-import { LayoutDashboard, Building2, Receipt, LogOut } from "lucide-react";
+import { LayoutDashboard, Building2, Receipt, LogOut, BarChart3, Activity } from "lucide-react";
 import clsx from "clsx";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -25,6 +25,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { name: "Overview", href: "/", icon: LayoutDashboard },
         { name: "Companies", href: "/companies", icon: Building2 },
         { name: "Financials", href: "/financials", icon: Receipt },
+        { name: "Analytics", href: "/analytics", icon: BarChart3 },
+        { name: "System", href: "/system", icon: Activity },
     ];
 
     return (
@@ -42,7 +44,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             href={item.href}
                             className={clsx(
                                 "flex items-center gap-3 rounded px-4 py-3 text-sm font-medium transition",
-                                pathname === item.href
+                                (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href))
                                     ? "bg-slate-800 text-primary border-l-4 border-primary"
                                     : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
                             )}
