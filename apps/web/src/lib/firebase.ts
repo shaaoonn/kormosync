@@ -14,10 +14,14 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 
+
 // Set explicit persistence — survives tab close/browser restart
-setPersistence(auth, browserLocalPersistence).catch((err) => {
-    console.error('[FIREBASE] Failed to set persistence:', err);
-});
+if (typeof window !== 'undefined') {
+    setPersistence(auth, browserLocalPersistence).catch((err) => {
+        console.error('[FIREBASE] Failed to set persistence:', err);
+    });
+}
+
 
 const googleProvider = new GoogleAuthProvider();
 

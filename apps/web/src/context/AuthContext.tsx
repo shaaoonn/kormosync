@@ -5,9 +5,7 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { setupGlobalAxiosInterceptors } from '@/lib/axiosSetup';
 
-// Setup global axios interceptors (auto-token + 401 refresh+retry)
-// This runs once when this module loads — covers ALL 26+ files using raw axios
-setupGlobalAxiosInterceptors();
+
 
 interface ExtendedUser {
     uid: string;
@@ -43,6 +41,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        // Setup global axios interceptors (auto-token + 401 refresh+retry)
+        // Must run inside useEffect to avoid SSR issues (server modifying global axios)
+        setupGlobalAxiosInterceptors();
+    }, []);
+
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
