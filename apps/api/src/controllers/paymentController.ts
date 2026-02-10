@@ -125,13 +125,18 @@ export const handleCallback = async (req: Request, res: Response) => {
         }
 
         if (status === 'success') {
+            // Fix 6A: Validate paymentID exists before processing
+            if (!paymentID || typeof paymentID !== 'string') {
+                return res.redirect(`http://localhost:3000/payment/fail?message=invalid_payment`);
+            }
+
             // 1. Grant Token (Tokens expire, good to refresh or cache, fetching fresh for safety)
             const token = await grantToken();
 
-            // 2. Execute Payment
+            // 2. Execute Payment — this is server-to-server verification with bKash
             const executeRes = await bkashExecute(token, paymentID as string);
 
-            if (executeRes && executeRes.trxID) {
+            if (executeRes && executeRes.trxID && executeRes.transactionStatus === 'Completed') {
                 // 3. Update Payment in DB
                 // Find by the temporary trxID (which was paymentID)
                 const payment = await prisma.payment.findUnique({

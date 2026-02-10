@@ -5,6 +5,7 @@ import { Search, MapPin, Globe, Linkedin, CheckCircle } from "lucide-react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
 import Link from "next/link";
+import { AdminOnly } from "@/components/guards/RoleGuard";
 
 interface Freelancer {
     id: string;
@@ -54,6 +55,7 @@ export default function FindFreelancersPage() {
     };
 
     return (
+        <AdminOnly>
         <div className="space-y-6">
             <h1 className="text-2xl font-bold text-gray-800">Find Freelancers</h1>
 
@@ -143,5 +145,6 @@ export default function FindFreelancersPage() {
                 </div>
             )}
         </div>
+        </AdminOnly>
     );
 }

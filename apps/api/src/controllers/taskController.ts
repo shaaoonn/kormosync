@@ -174,6 +174,19 @@ export const createTask = async (req: Request, res: Response) => {
             data.status = 'IN_PROGRESS';
         }
 
+        // Validate recurring task fields
+        if (isRecurring) {
+            if (!recurringType) {
+                return res.status(400).json({ error: 'recurringType is required for recurring tasks' });
+            }
+            if (recurringCount !== undefined && recurringCount !== null && recurringCount <= 0) {
+                return res.status(400).json({ error: 'recurringCount must be greater than 0' });
+            }
+            if (recurringEndDate && new Date(recurringEndDate) < new Date()) {
+                return res.status(400).json({ error: 'recurringEndDate must be in the future' });
+            }
+        }
+
         // Create Task (assignees NOT connected directly — they go through approval)
         const task = await prisma.task.create({
             data: {
@@ -317,23 +330,13 @@ export const getTasks = async (req: Request, res: Response) => {
             where = { companyId: user.companyId };
             if (user.role === 'EMPLOYEE') {
                 where.assignees = { some: { id: user.id } };
+                where.publishStatus = 'PUBLISHED';
             }
         }
 
         if (status) {
             where.status = status;
         }
-
-        const fs = require('fs');
-        const path = require('path');
-        const logFile = path.resolve(__dirname, '../../../../api_debug.log');
-
-        const logMsg = (msg: string) => {
-            fs.appendFileSync(logFile, new Date().toISOString() + ' ' + msg + '\n');
-        }
-
-        logMsg(`🔍 FETCHING TASKS FOR USER: ${user.email} (${user.role}) ID: ${user.id} Company: ${user.companyId}`);
-        logMsg(`🔍 WHERE CLAUSE: ${JSON.stringify(where)}`);
 
         const tasks = await prisma.task.findMany({
             where,
@@ -367,9 +370,6 @@ export const getTasks = async (req: Request, res: Response) => {
             },
             orderBy: { createdAt: 'desc' }
         });
-
-        logMsg(`✅ FOUND ${tasks.length} TASKS`);
-        console.log(`✅ FOUND ${tasks.length} TASKS`);
 
         // Sign URLs for tasks in batches of 3 to avoid overwhelming MinIO
         const TASK_BATCH_SIZE = 3;
@@ -466,6 +466,18 @@ export const getTaskById = async (req: Request, res: Response) => {
             return res.status(404).json({ error: "Task not found" });
         }
 
+        // Cross-tenant access verification
+        const user = getUser(req);
+        if (user) {
+            if (user.role === 'FREELANCER') {
+                if (task.creatorId !== user.id && task.clientId !== user.companyId) {
+                    return res.status(403).json({ error: 'Access denied' });
+                }
+            } else if (task.companyId && task.companyId !== user.companyId) {
+                return res.status(403).json({ error: 'Access denied' });
+            }
+        }
+
         // BATCHED URL signing — 5 concurrent max instead of 100+ concurrent
         // Previously: Promise.all() with 50 screenshots × 2 calls each = 100 concurrent MinIO requests
         // Now: 5 at a time, single call per screenshot (no duplicate)
@@ -528,6 +540,28 @@ export const updateTask = async (req: Request, res: Response) => {
             },
         });
 
+        // Fix 4F: employeeCanComplete enforcement
+        if (data.status === 'DONE' && user.role === 'EMPLOYEE') {
+            const taskForCheck = await prisma.task.findUnique({ where: { id: taskId }, select: { employeeCanComplete: true } });
+            if (taskForCheck && !taskForCheck.employeeCanComplete) {
+                return res.status(403).json({ error: 'শুধুমাত্র অ্যাডমিন এই টাস্ক সম্পন্ন করতে পারবে' });
+            }
+        }
+
+        // Validate status transitions
+        if (data.status && oldTask && data.status !== oldTask.status) {
+            const VALID_TRANSITIONS: Record<string, string[]> = {
+                'TODO': ['IN_PROGRESS'],
+                'IN_PROGRESS': ['REVIEW', 'DONE', 'TODO'],
+                'REVIEW': ['DONE', 'IN_PROGRESS'],
+                'DONE': [], // Final state
+            };
+            const allowed = VALID_TRANSITIONS[oldTask.status] || [];
+            if (!allowed.includes(data.status)) {
+                return res.status(400).json({ error: `Invalid status transition: ${oldTask.status} → ${data.status}` });
+            }
+        }
+
         // 1. Update Main Task
         const updatedTask = await prisma.task.update({
             where: { id: taskId },
@@ -545,7 +579,9 @@ export const updateTask = async (req: Request, res: Response) => {
                 oldData: oldTask,
                 newData: data,
                 fields: ['title', 'description', 'status', 'priority', 'deadline',
-                         'activityThreshold', 'penaltyEnabled', 'penaltyType', 'penaltyThresholdMins', 'monitoringMode'],
+                    'activityThreshold', 'penaltyEnabled', 'penaltyType', 'penaltyThresholdMins',
+                    'monitoringMode', 'screenshotInterval', 'maxBudget', 'employeeCanComplete',
+                    'breakReminderEnabled', 'screenshotEnabled', 'activityEnabled', 'allowRemoteCapture'],
             });
 
             if (assigneeIds) {
@@ -563,6 +599,18 @@ export const updateTask = async (req: Request, res: Response) => {
                 updatedBy: user?.name || 'Unknown',
             });
         }
+
+        // Emit task update event for real-time sync
+        try {
+            const io2 = req.app.get('io');
+            if (io2 && updatedTask.companyId) {
+                io2.to(`company:${updatedTask.companyId}`).emit('task:updated', {
+                    taskId: updatedTask.id,
+                    status: updatedTask.status,
+                    updatedBy: user.name || user.email,
+                });
+            }
+        } catch (e) { /* socket emit failed */ }
 
         // 2. Handle SubTasks if provided
         if (subTasks && Array.isArray(subTasks)) {
@@ -631,9 +679,13 @@ export const approveTask = async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Not authorized to approve this task' });
         }
 
+        if (task.status !== 'IN_PROGRESS' && task.status !== 'REVIEW') {
+            return res.status(400).json({ error: 'Only IN_PROGRESS or REVIEW tasks can be approved' });
+        }
+
         const updatedTask = await prisma.task.update({
             where: { id: taskId },
-            data: { status: 'APPROVED' as any }
+            data: { status: 'DONE' }
         });
 
         return res.json({ success: true, task: updatedTask });

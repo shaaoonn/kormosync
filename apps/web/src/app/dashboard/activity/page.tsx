@@ -7,6 +7,7 @@ import { io, Socket } from 'socket.io-client';
 import { Clock, MousePointer, Keyboard, X, ChevronDown, ChevronUp, Layers, CheckCircle, Circle, Calendar, BarChart3, Camera, Eye, Monitor } from 'lucide-react';
 import Link from 'next/link';
 import ActivityTimeline from '@/components/dashboard/ActivityTimeline';
+import { AdminOnly } from "@/components/guards/RoleGuard";
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8000';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -245,6 +246,7 @@ export default function ActivityMonitorPage() {
     if (loading) return <div className="p-8 text-center text-white">Loading activity data...</div>;
 
     return (
+        <AdminOnly>
         <div className="p-6 max-w-7xl mx-auto space-y-8 min-h-screen bg-[#0F0F0F]">
 
             {/* Header */}
@@ -617,5 +619,6 @@ export default function ActivityMonitorPage() {
                 </div>
             )}
         </div>
+        </AdminOnly>
     );
 }

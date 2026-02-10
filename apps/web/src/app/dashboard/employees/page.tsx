@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { UserPlus, Link2, Trash2, Copy, Mail, Check, Users, Clock, Eye } from "lucide-react";
+import { UserPlus, Link2, Trash2, Copy, Mail, Check, Users, Clock, Eye, Settings } from "lucide-react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
 import toast from "react-hot-toast";
+import { AdminOnly } from "@/components/guards/RoleGuard";
 
 interface Member {
     id: string;
@@ -118,6 +119,7 @@ export default function EmployeesPage() {
     };
 
     return (
+        <AdminOnly>
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-gray-800">Team Members</h1>
@@ -162,11 +164,16 @@ export default function EmployeesPage() {
                                     </td>
                                     <td className="px-6 py-4 text-gray-500">{member.designation || '-'}</td>
                                     <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                                        <Link href={`/dashboard/employees/${member.id}`} className="text-indigo-600 hover:text-indigo-800" title="View Profile">
-                                            <Eye className="w-4 h-4" />
+                                        <Link href={`/dashboard/employees/${member.id}?tab=manage`} className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 text-xs font-medium transition" title="Manage Employee">
+                                            <Settings className="w-3.5 h-3.5" />
+                                            Manage
+                                        </Link>
+                                        <Link href={`/dashboard/employees/${member.id}?tab=cv`} className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 text-xs font-medium transition" title="View CV">
+                                            <Eye className="w-3.5 h-3.5" />
+                                            CV
                                         </Link>
                                         {member.role !== 'OWNER' && (
-                                            <button onClick={() => handleRemove(member.id)} className="text-red-500 hover:text-red-700" title="Remove">
+                                            <button onClick={() => handleRemove(member.id)} className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition" title="Remove">
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         )}
@@ -268,5 +275,6 @@ export default function EmployeesPage() {
                 </div>
             )}
         </div>
+        </AdminOnly>
     );
 }

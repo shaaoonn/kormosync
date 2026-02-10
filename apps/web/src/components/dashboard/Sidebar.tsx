@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import axios from "axios";
 import {
     Home,
     CheckSquare,
@@ -17,32 +19,39 @@ import {
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
-const adminMenuItems = [
+interface MenuItem {
+    name: string;
+    href: string;
+    icon: any;
+    badgeKey?: string;
+}
+
+const adminMenuItems: MenuItem[] = [
     { name: "Overview", href: "/dashboard", icon: Home },
     { name: "Tasks", href: "/dashboard/tasks", icon: CheckSquare },
     { name: "Activity Log", href: "/dashboard/activity", icon: Activity },
     { name: "Employees", href: "/dashboard/employees", icon: Users },
     { name: "Find Freelancers", href: "/dashboard/freelancers", icon: UserPlus },
-    { name: "Leave Mgmt", href: "/dashboard/leave", icon: CalendarDays },
+    { name: "Leave Mgmt", href: "/dashboard/leave", icon: CalendarDays, badgeKey: "pendingLeaves" },
     { name: "Attendance", href: "/dashboard/attendance", icon: ClipboardCheck },
     { name: "Payroll", href: "/dashboard/payroll", icon: DollarSign },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
-const employeeMenuItems = [
+const employeeMenuItems: MenuItem[] = [
     { name: "Overview", href: "/dashboard", icon: Home },
-    { name: "My Tasks", href: "/dashboard/tasks", icon: CheckSquare },
+    { name: "My Tasks", href: "/dashboard/tasks", icon: CheckSquare, badgeKey: "activeTasks" },
     { name: "My Activity", href: "/dashboard/activity", icon: Activity },
     { name: "My Leave", href: "/dashboard/leave", icon: CalendarDays },
 ];
 
-const freelancerMenuItems = [
+const freelancerMenuItems: MenuItem[] = [
     { name: "Overview", href: "/dashboard", icon: Home },
     { name: "My Tasks", href: "/dashboard/tasks", icon: CheckSquare },
     { name: "My Profile", href: "/dashboard/profile", icon: Users },
 ];
 
-const commonMenuItems = [
+const commonMenuItems: MenuItem[] = [
     { name: "My Profile", href: "/dashboard/profile", icon: Users },
 ];
 
@@ -51,6 +60,7 @@ export default function Sidebar() {
     const router = useRouter();
     const { user, loading, logout } = useAuth();
     const role = user?.role || "EMPLOYEE";
+    const [badges, setBadges] = useState<Record<string, number>>({});
 
     const handleLogout = async () => {
         await logout();
@@ -59,6 +69,23 @@ export default function Sidebar() {
 
     const isAdmin = role === "OWNER" || role === "ADMIN";
     const isFreelancer = role === "FREELANCER";
+
+    // Phase 9C: Fetch badge counts
+    useEffect(() => {
+        const fetchBadges = async () => {
+            try {
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/dashboard/badge-counts`);
+                setBadges(res.data || {});
+            } catch {
+                // Silent fail for badges
+            }
+        };
+        if (user) {
+            fetchBadges();
+            const interval = setInterval(fetchBadges, 60000); // Refresh every minute
+            return () => clearInterval(interval);
+        }
+    }, [user]);
 
     let menuItems = employeeMenuItems;
     if (isAdmin) menuItems = adminMenuItems;
@@ -87,7 +114,12 @@ export default function Sidebar() {
                                 }`}
                         >
                             <Icon className="w-5 h-5 mr-3" />
-                            {item.name}
+                            <span className="flex-1">{item.name}</span>
+                            {item.badgeKey && badges[item.badgeKey] > 0 && (
+                                <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                                    {badges[item.badgeKey]}
+                                </span>
+                            )}
                         </Link>
                     );
                 })}

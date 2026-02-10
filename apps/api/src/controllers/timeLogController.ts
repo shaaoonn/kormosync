@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { uploadToMinio, getSignedViewUrl } from '../utils/minioClient'; // Reuse MinIO client
 import { v4 as uuidv4 } from 'uuid';
+import { invalidateEarningsCache } from '../services/earningsService';
 
 
 /**
@@ -52,6 +53,9 @@ export const uploadTimeLog = async (req: Request, res: Response) => {
                 taskId,
             }
         });
+
+        // Fix 7E: Invalidate earnings cache when new timelog is created
+        invalidateEarningsCache(dbUser.id);
 
         // Generate a 1-hour signed URL for immediate usage
         const signedUrl = await getSignedViewUrl(fileKey);

@@ -139,3 +139,12 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
         });
     }
 };
+
+// Fix 6E: Export function to clear auth cache for a specific user (e.g., on member removal)
+export function clearAuthCacheForUser(firebaseUid: string): void {
+    for (const [key, entry] of authCache.entries()) {
+        if (entry.user.uid === firebaseUid) {
+            authCache.delete(key);
+        }
+    }
+}

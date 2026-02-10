@@ -92,6 +92,14 @@ export function setupGlobalAxiosInterceptors() {
                 }
             }
 
+            // Fix 7C: Handle 429 (server busy) and 503 (maintenance) errors
+            if (error.response?.status === 429) {
+                console.warn('[AXIOS] Server busy (429) — rate limited');
+            }
+            if (error.response?.status === 503) {
+                console.warn('[AXIOS] Service unavailable (503) — server maintenance');
+            }
+
             return Promise.reject(error);
         }
     );

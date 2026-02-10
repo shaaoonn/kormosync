@@ -163,6 +163,7 @@ model Company {
   // Payroll Settings
   overtimeRate         Float             @default(1.5)   // Overtime multiplier (1.5x)
   defaultExpectedHours Float             @default(8.0)   // Daily expected work hours
+  workingDaysPerMonth  Int               @default(22)    // Working days per month (admin configurable)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -220,6 +221,20 @@ model User {
   monthlySalary       Float?      @default(0.0)
   expectedHoursPerDay Float       @default(8.0)
   minDailyHours       Float       @default(0)    // Minimum daily hours for attendance (0 = disabled)
+
+  // Per-employee overrides (null = use company default)
+  overrideWorkingDaysPerMonth  Int?
+  overrideOvertimeRate         Float?
+  overrideExpectedHours        Float?
+
+  // Work schedule (HH:mm format strings)
+  workStartTime    String?    // e.g. "09:00"
+  workEndTime      String?    // e.g. "18:00"
+  breakStartTime   String?    // e.g. "13:00"
+  breakEndTime     String?    // e.g. "14:00"
+
+  // Weekly off days (0=Sunday, 1=Monday ... 5=Friday, 6=Saturday)
+  weeklyOffDays    Int[]      @default([5])  // Default: Friday off (Bangladesh)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -734,9 +749,9 @@ model LeaveBalance {
   paidLeave     Int      @default(10)
   sickLeave     Int      @default(7)
   unpaidLeave   Int      @default(0)
-  paidUsed      Int      @default(0)
-  sickUsed      Int      @default(0)
-  unpaidUsed    Int      @default(0)
+  paidUsed      Float    @default(0)
+  sickUsed      Float    @default(0)
+  unpaidUsed    Float    @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

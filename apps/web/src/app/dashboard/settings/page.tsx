@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Settings, Building2, HardDrive, Users, CreditCard, Save, Sparkles } from "lucide-react";
+import { Settings, Building2, HardDrive, Users, CreditCard, Save, Sparkles, Clock } from "lucide-react";
 import axios from "axios";
 import { auth } from "@/lib/firebase";
 import toast from "react-hot-toast";
@@ -33,12 +33,52 @@ export default function SettingsPage() {
     const [saving, setSaving] = useState(false);
     const [editName, setEditName] = useState("");
     const [editSize, setEditSize] = useState("");
+    const [workingDays, setWorkingDays] = useState(22);
+    const [overtimeRate, setOvertimeRate] = useState(1.5);
+    const [expectedHours, setExpectedHours] = useState(8);
+    const [savingPayroll, setSavingPayroll] = useState(false);
 
     const isOwner = user?.role === "OWNER";
 
     useEffect(() => {
         fetchSettings();
     }, []);
+
+    useEffect(() => {
+        if (isOwner) fetchPayrollSettings();
+    }, [isOwner]);
+
+    const fetchPayrollSettings = async () => {
+        try {
+            const token = await auth.currentUser?.getIdToken();
+            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/company/payroll-settings`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.data.success) {
+                setWorkingDays(res.data.settings.workingDaysPerMonth || 22);
+                setOvertimeRate(res.data.settings.overtimeRate || 1.5);
+                setExpectedHours(res.data.settings.defaultExpectedHours || 8);
+            }
+        } catch (error) {
+            console.error("Failed to fetch payroll settings:", error);
+        }
+    };
+
+    const handleSavePayroll = async () => {
+        setSavingPayroll(true);
+        try {
+            const token = await auth.currentUser?.getIdToken();
+            await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/company/payroll-settings`,
+                { workingDaysPerMonth: workingDays, overtimeRate, defaultExpectedHours: expectedHours },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            toast.success("পে-রোল সেটিংস সেভ হয়েছে!");
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || "সেটিংস সেভ করতে ব্যর্থ");
+        } finally {
+            setSavingPayroll(false);
+        }
+    };
 
     const fetchSettings = async () => {
         try {
@@ -195,6 +235,69 @@ export default function SettingsPage() {
                     <p className="text-sm text-gray-500 mt-1">Available credits</p>
                 </div>
             </div>
+
+            {/* Payroll & Attendance Settings */}
+            {isOwner && (
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Clock className="w-5 h-5 text-cyan-400" />
+                        <h2 className="text-lg font-semibold text-gray-100">Payroll & Attendance Settings</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1">Working Days / Month</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={31}
+                                value={workingDays}
+                                onChange={(e) => setWorkingDays(parseInt(e.target.value) || 22)}
+                                className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Default: 22 days</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1">Overtime Rate Multiplier</label>
+                            <input
+                                type="number"
+                                min={1.0}
+                                step={0.1}
+                                value={overtimeRate}
+                                onChange={(e) => setOvertimeRate(parseFloat(e.target.value) || 1.5)}
+                                className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Default: 1.5x</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1">Expected Hours / Day</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={24}
+                                step={0.5}
+                                value={expectedHours}
+                                onChange={(e) => setExpectedHours(parseFloat(e.target.value) || 8)}
+                                className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Default: 8 hours</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            onClick={handleSavePayroll}
+                            disabled={savingPayroll}
+                            className="flex items-center gap-2 px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium transition disabled:opacity-50"
+                        >
+                            <Save className="w-4 h-4" />
+                            {savingPayroll ? "Saving..." : "Save Payroll Settings"}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Subscription Card */}
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">

@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
+import { invalidateEarningsCache } from '../services/earningsService';
 
 // ============================================================
 // Employee: Submit leave request
@@ -30,6 +31,14 @@ export const createLeaveRequest = async (req: Request, res: Response): Promise<v
         if (end < start) {
             res.status(400).json({ success: false, error: 'endDate must be after startDate' });
             return;
+        }
+
+        // Fix 2G: HALF_DAY must be single day only
+        if (type === 'HALF_DAY') {
+            if (start.toDateString() !== end.toDateString()) {
+                res.status(400).json({ success: false, error: 'অর্ধদিবস ছুটি শুধুমাত্র একদিনের জন্য প্রযোজ্য' });
+                return;
+            }
         }
 
         // Calculate total days
@@ -337,52 +346,101 @@ export const approveLeaveRequest = async (req: Request, res: Response): Promise<
             return;
         }
 
-        // Update leave request
-        const updated = await prisma.leaveRequest.update({
-            where: { id },
-            data: {
-                status: 'APPROVED',
-                approvedBy: user.id,
-                approvedAt: new Date(),
-            },
+        // Fix 2H: Wrap approval + balance update in transaction to prevent race condition
+        const updated = await prisma.$transaction(async (tx) => {
+            // Verify balance is sufficient before approving
+            const year = leaveRequest.startDate.getFullYear();
+            if (leaveRequest.type === 'PAID' || leaveRequest.type === 'HALF_DAY') {
+                const balance = await tx.leaveBalance.findUnique({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                });
+                const remaining = (balance?.paidLeave || 10) - (balance?.paidUsed || 0);
+                if (remaining < leaveRequest.totalDays) {
+                    throw new Error(`অপর্যাপ্ত বেতনসহ ছুটি। অবশিষ্ট: ${remaining} দিন`);
+                }
+            } else if (leaveRequest.type === 'SICK') {
+                const balance = await tx.leaveBalance.findUnique({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                });
+                const remaining = (balance?.sickLeave || 7) - (balance?.sickUsed || 0);
+                if (remaining < leaveRequest.totalDays) {
+                    throw new Error(`অপর্যাপ্ত অসুস্থতার ছুটি। অবশিষ্ট: ${remaining} দিন`);
+                }
+            }
+
+            // Update leave request
+            const result = await tx.leaveRequest.update({
+                where: { id },
+                data: {
+                    status: 'APPROVED',
+                    approvedBy: user.id,
+                    approvedAt: new Date(),
+                },
+            });
+
+            // Decrement leave balance
+            if (leaveRequest.type === 'PAID' || leaveRequest.type === 'HALF_DAY') {
+                await tx.leaveBalance.upsert({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    update: { paidUsed: { increment: leaveRequest.totalDays } },
+                    create: {
+                        userId: leaveRequest.userId,
+                        companyId: leaveRequest.companyId,
+                        year,
+                        paidUsed: leaveRequest.totalDays,
+                    },
+                });
+            } else if (leaveRequest.type === 'SICK') {
+                await tx.leaveBalance.upsert({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    update: { sickUsed: { increment: leaveRequest.totalDays } },
+                    create: {
+                        userId: leaveRequest.userId,
+                        companyId: leaveRequest.companyId,
+                        year,
+                        sickUsed: leaveRequest.totalDays,
+                    },
+                });
+            } else if (leaveRequest.type === 'UNPAID') {
+                await tx.leaveBalance.upsert({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    update: { unpaidUsed: { increment: leaveRequest.totalDays } },
+                    create: {
+                        userId: leaveRequest.userId,
+                        companyId: leaveRequest.companyId,
+                        year,
+                        unpaidUsed: leaveRequest.totalDays,
+                    },
+                });
+            }
+
+            // Fix 5C: Sync attendance records for leave dates
+            const currentDate = new Date(leaveRequest.startDate);
+            const endDateObj = new Date(leaveRequest.endDate);
+            while (currentDate <= endDateObj) {
+                const day = currentDate.getDay();
+                if (day !== 0 && day !== 6) { // Skip weekends
+                    const dateOnly = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+                    await tx.dailyAttendance.upsert({
+                        where: { userId_date: { userId: leaveRequest.userId, date: dateOnly } },
+                        update: { status: 'ON_LEAVE' as any },
+                        create: {
+                            userId: leaveRequest.userId,
+                            companyId: leaveRequest.companyId,
+                            date: dateOnly,
+                            status: 'ON_LEAVE' as any,
+                            expectedSeconds: 28800,
+                        },
+                    });
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            return result;
         });
 
-        // Decrement leave balance
-        const year = leaveRequest.startDate.getFullYear();
-        if (leaveRequest.type === 'PAID' || leaveRequest.type === 'HALF_DAY') {
-            await prisma.leaveBalance.upsert({
-                where: { userId_year: { userId: leaveRequest.userId, year } },
-                update: { paidUsed: { increment: Math.ceil(leaveRequest.totalDays) } },
-                create: {
-                    userId: leaveRequest.userId,
-                    companyId: leaveRequest.companyId,
-                    year,
-                    paidUsed: Math.ceil(leaveRequest.totalDays),
-                },
-            });
-        } else if (leaveRequest.type === 'SICK') {
-            await prisma.leaveBalance.upsert({
-                where: { userId_year: { userId: leaveRequest.userId, year } },
-                update: { sickUsed: { increment: Math.ceil(leaveRequest.totalDays) } },
-                create: {
-                    userId: leaveRequest.userId,
-                    companyId: leaveRequest.companyId,
-                    year,
-                    sickUsed: Math.ceil(leaveRequest.totalDays),
-                },
-            });
-        } else if (leaveRequest.type === 'UNPAID') {
-            await prisma.leaveBalance.upsert({
-                where: { userId_year: { userId: leaveRequest.userId, year } },
-                update: { unpaidUsed: { increment: Math.ceil(leaveRequest.totalDays) } },
-                create: {
-                    userId: leaveRequest.userId,
-                    companyId: leaveRequest.companyId,
-                    year,
-                    unpaidUsed: Math.ceil(leaveRequest.totalDays),
-                },
-            });
-        }
+        // Fix 3C: Invalidate earnings cache after leave approval
+        invalidateEarningsCache(leaveRequest.userId);
 
         // Notify employee
         await prisma.notification.create({
@@ -429,10 +487,13 @@ export const rejectLeaveRequest = async (req: Request, res: Response): Promise<v
             return;
         }
 
-        if (leaveRequest.status !== 'PENDING') {
-            res.status(400).json({ success: false, error: 'Only PENDING requests can be rejected' });
+        // Fix 2B: Allow rejecting both PENDING and APPROVED requests
+        if (leaveRequest.status !== 'PENDING' && leaveRequest.status !== 'APPROVED') {
+            res.status(400).json({ success: false, error: 'শুধুমাত্র অপেক্ষমান বা অনুমোদিত আবেদন প্রত্যাখ্যান করা যায়' });
             return;
         }
+
+        const previousStatus = leaveRequest.status;
 
         const updated = await prisma.leaveRequest.update({
             where: { id },
@@ -442,12 +503,51 @@ export const rejectLeaveRequest = async (req: Request, res: Response): Promise<v
             },
         });
 
+        // Fix 2B: Refund leave balance if previously APPROVED
+        if (previousStatus === 'APPROVED') {
+            const year = leaveRequest.startDate.getFullYear();
+            if (leaveRequest.type === 'PAID' || leaveRequest.type === 'HALF_DAY') {
+                await prisma.leaveBalance.update({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    data: { paidUsed: { decrement: leaveRequest.totalDays } },
+                });
+            } else if (leaveRequest.type === 'SICK') {
+                await prisma.leaveBalance.update({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    data: { sickUsed: { decrement: leaveRequest.totalDays } },
+                });
+            } else if (leaveRequest.type === 'UNPAID') {
+                await prisma.leaveBalance.update({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    data: { unpaidUsed: { decrement: leaveRequest.totalDays } },
+                });
+            }
+
+            // Revert attendance records to ABSENT
+            const currentDate = new Date(leaveRequest.startDate);
+            const endDateObj = new Date(leaveRequest.endDate);
+            while (currentDate <= endDateObj) {
+                const day = currentDate.getDay();
+                if (day !== 0 && day !== 6) {
+                    const dateOnly = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+                    await prisma.dailyAttendance.updateMany({
+                        where: { userId: leaveRequest.userId, date: dateOnly, status: 'ON_LEAVE' as any },
+                        data: { status: 'ABSENT' as any },
+                    });
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            // Invalidate earnings cache
+            invalidateEarningsCache(leaveRequest.userId);
+        }
+
         // Notify employee
         await prisma.notification.create({
             data: {
                 userId: leaveRequest.userId,
                 title: 'ছুটি প্রত্যাখ্যাত ❌',
-                message: `আপনার ছুটির আবেদন প্রত্যাখ্যাত হয়েছে।${reason ? ` কারণ: ${reason}` : ''}`,
+                message: `আপনার ছুটির আবেদন প্রত্যাখ্যাত হয়েছে।${reason ? ` কারণ: ${reason}` : ''}${previousStatus === 'APPROVED' ? ' (পূর্বে অনুমোদিত ছুটি বাতিল করা হয়েছে, ব্যালেন্স ফেরত দেওয়া হয়েছে)' : ''}`,
                 type: 'WARNING',
             },
         });
@@ -485,15 +585,56 @@ export const cancelLeaveRequest = async (req: Request, res: Response): Promise<v
             return;
         }
 
-        if (leaveRequest.status !== 'PENDING') {
-            res.status(400).json({ success: false, error: 'শুধুমাত্র অপেক্ষমান আবেদন বাতিল করা যায়' });
+        // Allow cancelling PENDING or APPROVED requests
+        if (leaveRequest.status !== 'PENDING' && leaveRequest.status !== 'APPROVED') {
+            res.status(400).json({ success: false, error: 'শুধুমাত্র অপেক্ষমান বা অনুমোদিত আবেদন বাতিল করা যায়' });
             return;
         }
+
+        const previousStatus = leaveRequest.status;
 
         const updated = await prisma.leaveRequest.update({
             where: { id },
             data: { status: 'CANCELLED' },
         });
+
+        // Refund balance if was APPROVED
+        if (previousStatus === 'APPROVED') {
+            const year = leaveRequest.startDate.getFullYear();
+            if (leaveRequest.type === 'PAID' || leaveRequest.type === 'HALF_DAY') {
+                await prisma.leaveBalance.update({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    data: { paidUsed: { decrement: leaveRequest.totalDays } },
+                });
+            } else if (leaveRequest.type === 'SICK') {
+                await prisma.leaveBalance.update({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    data: { sickUsed: { decrement: leaveRequest.totalDays } },
+                });
+            } else if (leaveRequest.type === 'UNPAID') {
+                await prisma.leaveBalance.update({
+                    where: { userId_year: { userId: leaveRequest.userId, year } },
+                    data: { unpaidUsed: { decrement: leaveRequest.totalDays } },
+                });
+            }
+
+            // Revert attendance records
+            const currentDate = new Date(leaveRequest.startDate);
+            const endDateObj = new Date(leaveRequest.endDate);
+            while (currentDate <= endDateObj) {
+                const day = currentDate.getDay();
+                if (day !== 0 && day !== 6) {
+                    const dateOnly = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+                    await prisma.dailyAttendance.updateMany({
+                        where: { userId: leaveRequest.userId, date: dateOnly, status: 'ON_LEAVE' as any },
+                        data: { status: 'ABSENT' as any },
+                    });
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            invalidateEarningsCache(leaveRequest.userId);
+        }
 
         res.json({ success: true, leaveRequest: updated });
     } catch (error: any) {

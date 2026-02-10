@@ -31,6 +31,8 @@ function AdminDashboard({ showSuccess, setShowSuccess }: { showSuccess: boolean,
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let intervalId: NodeJS.Timeout | null = null;
+
         const fetchStats = async () => {
             try {
                 const token = await auth.currentUser?.getIdToken();
@@ -48,10 +50,21 @@ function AdminDashboard({ showSuccess, setShowSuccess }: { showSuccess: boolean,
         };
 
         const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) fetchStats();
-            else setLoading(false);
+            if (user) {
+                fetchStats();
+                // Fix 7A: Auto-refresh dashboard stats every 30 seconds
+                if (intervalId) clearInterval(intervalId);
+                intervalId = setInterval(fetchStats, 30000);
+            } else {
+                setLoading(false);
+                if (intervalId) clearInterval(intervalId);
+            }
         });
-        return () => unsubscribe();
+
+        return () => {
+            unsubscribe();
+            if (intervalId) clearInterval(intervalId);
+        };
     }, []);
 
     if (loading) {

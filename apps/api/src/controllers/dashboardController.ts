@@ -197,3 +197,40 @@ export const getStats = async (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to fetch dashboard stats' });
     }
 };
+
+// Phase 9D: Badge counts for sidebar
+export const getBadgeCounts = async (req: Request, res: Response) => {
+    try {
+        const user = req.user;
+        if (!user?.companyId) {
+            return res.json({ pendingLeaves: 0, pendingAssignments: 0 });
+        }
+
+        const isAdmin = user.role === 'OWNER' || user.role === 'ADMIN';
+
+        if (isAdmin) {
+            const [pendingLeaves, pendingAssignments] = await Promise.all([
+                prisma.leaveRequest.count({
+                    where: { user: { companyId: user.companyId }, status: 'PENDING' }
+                }),
+                prisma.taskAssignment.count({
+                    where: { task: { companyId: user.companyId }, status: 'PENDING' }
+                }),
+            ]);
+            return res.json({ pendingLeaves, pendingAssignments });
+        } else {
+            const [activeTasks, pendingAssignments] = await Promise.all([
+                prisma.task.count({
+                    where: { assignees: { some: { id: user.id } }, status: 'IN_PROGRESS' }
+                }),
+                prisma.taskAssignment.count({
+                    where: { userId: user.id!, status: 'PENDING' }
+                }),
+            ]);
+            return res.json({ activeTasks, pendingAssignments });
+        }
+    } catch (error) {
+        console.error('Get Badge Counts Error:', error);
+        return res.status(500).json({ error: 'Failed to fetch badge counts' });
+    }
+};

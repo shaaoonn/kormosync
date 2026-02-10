@@ -334,6 +334,43 @@ export const updateSubTask = async (req: Request, res: Response): Promise<void> 
             data: updates
         });
 
+        // Fix 4E: Subtask Status Aggregation — when a subtask is marked COMPLETED,
+        // check if ALL sibling subtasks are also COMPLETED → move parent task to REVIEW
+        if (updates.status === 'COMPLETED' && subTask.taskId) {
+            const allSiblings = await prisma.subTask.findMany({
+                where: { taskId: subTask.taskId },
+                select: { status: true }
+            });
+
+            const allCompleted = allSiblings.length > 0 && allSiblings.every(s => s.status === 'COMPLETED');
+
+            if (allCompleted) {
+                const parentTask = await prisma.task.findUnique({
+                    where: { id: subTask.taskId },
+                    select: { status: true }
+                });
+
+                // Only auto-promote if parent is still IN_PROGRESS (don't override DONE or other states)
+                if (parentTask && parentTask.status === 'IN_PROGRESS') {
+                    await prisma.task.update({
+                        where: { id: subTask.taskId },
+                        data: { status: 'REVIEW' }
+                    });
+
+                    // Emit socket event for real-time update
+                    const io = (req.app as any).get('io');
+                    const user = (req as any).user;
+                    if (io && user?.companyId) {
+                        io.to(`company:${user.companyId}`).emit('task:updated', {
+                            taskId: subTask.taskId,
+                            status: 'REVIEW',
+                            reason: 'All subtasks completed'
+                        });
+                    }
+                }
+            }
+        }
+
         res.json({ success: true, subTask });
     } catch (error: any) {
         console.error('Update SubTask Error:', error);

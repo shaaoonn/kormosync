@@ -5,6 +5,12 @@
 // ============================================================
 
 import prisma from '../utils/prisma';
+import { resolveEmployeeSettings } from '../utils/resolveSettings';
+
+// Fix 3D: Floating point precision helper
+function round2(n: number): number {
+    return Math.round(n * 100) / 100;
+}
 
 // ============================================================
 // Earnings Cache — prevents repeated 8+ DB queries per user
@@ -149,20 +155,12 @@ export async function calculateEarnings(
         throw new Error(`User ${userId} not found`);
     }
 
-    // Get company overtime rate
-    let overtimeRate = 1.5;
-    if (user.companyId) {
-        const company = await prisma.company.findUnique({
-            where: { id: user.companyId },
-            select: { overtimeRate: true, defaultExpectedHours: true },
-        });
-        if (company) {
-            overtimeRate = company.overtimeRate;
-        }
-    }
+    // Use per-employee override > company default > hardcoded fallback
+    const resolved = await resolveEmployeeSettings(userId);
+    const overtimeRate = resolved.overtimeRate;
 
     const hourlyRate = user.hourlyRate || 0;
-    const expectedHoursPerDay = user.expectedHoursPerDay || 8.0;
+    const expectedHoursPerDay = resolved.expectedHoursPerDay;
     const expectedSecondsPerDay = expectedHoursPerDay * 3600;
     const salaryType = user.salaryType || 'HOURLY';
     const monthlySalary = user.monthlySalary || 0;
@@ -279,28 +277,28 @@ export async function calculateEarnings(
         const dailyRate = totalWorkingDays > 0 ? monthlySalary / totalWorkingDays : 0;
         const effectiveWorkedDays = workedDays + paidLeaveDays;
 
-        workedAmount = parseFloat((workedDays * dailyRate).toFixed(2));
-        leavePay = parseFloat((paidLeaveDays * dailyRate).toFixed(2));
+        workedAmount = round2(workedDays * dailyRate);
+        leavePay = round2(paidLeaveDays * dailyRate);
 
         // Overtime for monthly: derive hourly equivalent
         const hourlyEquivalent = totalWorkingDays > 0 && expectedHoursPerDay > 0
             ? monthlySalary / (totalWorkingDays * expectedHoursPerDay)
             : 0;
-        overtimePay = parseFloat((overtimeHours * hourlyEquivalent * overtimeRate).toFixed(2));
-        penaltyAmount = parseFloat((penaltyHours * hourlyEquivalent).toFixed(2));
+        overtimePay = round2(overtimeHours * hourlyEquivalent * overtimeRate);
+        penaltyAmount = round2(penaltyHours * hourlyEquivalent);
 
-        grossAmount = parseFloat((workedAmount + leavePay + overtimePay).toFixed(2));
+        grossAmount = round2(workedAmount + leavePay + overtimePay);
     } else {
         // Hourly: straightforward
-        workedAmount = parseFloat((workedHours * hourlyRate).toFixed(2));
-        leavePay = parseFloat((leaveHours * hourlyRate).toFixed(2));
-        overtimePay = parseFloat((overtimeHours * hourlyRate * overtimeRate).toFixed(2));
-        penaltyAmount = parseFloat(((deductionMinutes / 60) * hourlyRate).toFixed(2));
+        workedAmount = round2(workedHours * hourlyRate);
+        leavePay = round2(leaveHours * hourlyRate);
+        overtimePay = round2(overtimeHours * hourlyRate * overtimeRate);
+        penaltyAmount = round2((deductionMinutes / 60) * hourlyRate);
 
-        grossAmount = parseFloat((workedAmount + leavePay + overtimePay).toFixed(2));
+        grossAmount = round2(workedAmount + leavePay + overtimePay);
     }
 
-    const netAmount = parseFloat(Math.max(0, grossAmount - penaltyAmount).toFixed(2));
+    const netAmount = round2(Math.max(0, grossAmount - penaltyAmount));
 
     // 7. Calculate VirtualHourlyRate & Market Value analysis for MONTHLY users
     let virtualHourlyRate: number | undefined;
@@ -309,8 +307,8 @@ export async function calculateEarnings(
     let savings: number | undefined;
 
     if (salaryType === 'MONTHLY' && monthlySalary > 0 && totalWorkingDays > 0 && expectedHoursPerDay > 0) {
-        virtualHourlyRate = parseFloat((monthlySalary / (totalWorkingDays * expectedHoursPerDay)).toFixed(2));
-        actualCost = parseFloat((workedHours * virtualHourlyRate).toFixed(2));
+        virtualHourlyRate = round2(monthlySalary / (totalWorkingDays * expectedHoursPerDay));
+        actualCost = round2(workedHours * virtualHourlyRate);
 
         // Calculate market value: what it would cost at task/subtask bundle rates
         // REUSE completedTimeLogs + activeTimeLogs from step 2
@@ -370,8 +368,8 @@ export async function calculateEarnings(
             }
         }
 
-        marketValue = parseFloat(totalMarketValue.toFixed(2));
-        savings = parseFloat((marketValue - actualCost).toFixed(2));
+        marketValue = round2(totalMarketValue);
+        savings = round2(marketValue - actualCost);
     }
 
     const result: EarningsBreakdown = {

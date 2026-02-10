@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
+import { resolveEmployeeSettings } from '../utils/resolveSettings';
 
 // ============================================================
 // Generate daily attendance for a company
@@ -19,7 +20,7 @@ export async function generateDailyAttendance(companyId: string, date: Date) {
     // Get company settings
     const company = await prisma.company.findUnique({
         where: { id: companyId },
-        select: { defaultExpectedHours: true },
+        select: { defaultExpectedHours: true, workingDaysPerMonth: true },
     });
     const defaultExpectedHours = company?.defaultExpectedHours || 8.0;
 
@@ -43,7 +44,9 @@ export async function generateDailyAttendance(companyId: string, date: Date) {
     const results = [];
 
     for (const emp of employees) {
-        const expectedHours = emp.expectedHoursPerDay || defaultExpectedHours;
+        // Per-employee override for expected hours and weekly off days
+        const empSettings = await resolveEmployeeSettings(emp.id);
+        const expectedHours = empSettings.expectedHoursPerDay;
         const expectedSeconds = Math.round(expectedHours * 3600);
 
         // 1. Get time logs for the day
@@ -94,9 +97,9 @@ export async function generateDailyAttendance(companyId: string, date: Date) {
         } else if (totalWorkedSeconds > 0) {
             status = 'PARTIAL';
         } else {
-            // Check if it's a weekend
+            // Check if it's a weekly off day (per-employee setting)
             const dayOfWeek = dayStart.getDay();
-            if (dayOfWeek === 0 || dayOfWeek === 6) {
+            if (empSettings.weeklyOffDays.includes(dayOfWeek)) {
                 status = 'HOLIDAY';
             } else {
                 status = 'ABSENT';
@@ -111,8 +114,8 @@ export async function generateDailyAttendance(companyId: string, date: Date) {
         const hourlyRate = emp.hourlyRate || 0;
 
         if (emp.salaryType === 'MONTHLY' && emp.monthlySalary) {
-            // For monthly: daily rate based on ~22 working days
-            const dailyRate = emp.monthlySalary / 22;
+            // For monthly: daily rate based on per-employee workingDaysPerMonth
+            const dailyRate = emp.monthlySalary / empSettings.workingDaysPerMonth;
             if (status === 'PRESENT' || status === 'PARTIAL') {
                 earningsToday = dailyRate;
             } else if (status === 'ON_LEAVE' && leaveForDay?.type !== 'UNPAID') {

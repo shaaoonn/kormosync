@@ -9,6 +9,15 @@ import { calculateActivityScore } from '../services/activityScoreService';
 
 const router = express.Router();
 
+// Fix 6C: Allowed file extensions for upload security
+const ALLOWED_EXTENSIONS = [
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',  // Images
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.pptx', '.txt', '.csv',  // Documents
+    '.mp4', '.webm', '.mov', '.avi',  // Videos
+    '.mp3', '.wav', '.ogg',  // Audio
+    '.zip', '.rar', '.7z',  // Archives
+];
+
 // Configure disk storage for general uploads
 // Configure memory storage for all uploads (to pass buffer to MinIO)
 const memoryStorage = multer.memoryStorage();
@@ -28,6 +37,13 @@ const screenshotUpload = multer({
 router.post('/', authenticateUser, upload.single('file'), async (req: Request, res: Response) => {
     if (!req.file) {
         res.status(400).json({ error: 'No file uploaded' });
+        return;
+    }
+
+    // Fix 6C: Validate file type
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        res.status(400).json({ error: `ফাইল টাইপ অনুমোদিত নয়: ${ext}। অনুমোদিত: ${ALLOWED_EXTENSIONS.join(', ')}` });
         return;
     }
 

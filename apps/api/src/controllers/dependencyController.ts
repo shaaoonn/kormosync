@@ -21,12 +21,30 @@ export const addDependency = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'A task cannot depend on itself' });
         }
 
-        // Prevent circular dependencies
-        const reverseExists = await prisma.taskDependency.findUnique({
-            where: { taskId_dependsOnTaskId: { taskId: dependsOnTaskId, dependsOnTaskId: taskId } }
-        });
-        if (reverseExists) {
-            return res.status(400).json({ error: 'Circular dependency detected' });
+        // Fix 4B: Deep circular dependency detection using recursive DFS
+        const hasCircularDependency = async (sourceId: string, targetId: string, visited = new Set<string>()): Promise<boolean> => {
+            if (sourceId === targetId) return true;
+            if (visited.has(sourceId)) return false;
+            visited.add(sourceId);
+
+            const deps = await prisma.taskDependency.findMany({
+                where: { taskId: sourceId },
+                select: { dependsOnTaskId: true }
+            });
+
+            for (const dep of deps) {
+                if (await hasCircularDependency(dep.dependsOnTaskId, targetId, visited)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Check if adding taskId → dependsOnTaskId would create a cycle
+        // (i.e., dependsOnTaskId already transitively depends on taskId)
+        const wouldCreateCycle = await hasCircularDependency(dependsOnTaskId, taskId);
+        if (wouldCreateCycle) {
+            return res.status(400).json({ error: 'Circular dependency detected: adding this dependency would create a cycle' });
         }
 
         const dependency = await prisma.taskDependency.create({

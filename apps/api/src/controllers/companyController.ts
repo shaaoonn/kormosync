@@ -309,3 +309,107 @@ export const joinCompany = async (req: Request, res: Response) => {
     // Redirect to acceptInvite logic
     return acceptInvite(req, res);
 };
+
+// Phase 8A: Update Payroll & Attendance Settings
+export const updatePayrollSettings = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        const user = req.user;
+
+        if (!user?.companyId) {
+            res.status(400).json({ error: 'User not linked to company' });
+            return;
+        }
+
+        // Only OWNER can update payroll settings
+        if (user.role !== 'OWNER' && user.role !== 'ADMIN') {
+            res.status(403).json({ error: 'Only admins can update payroll settings' });
+            return;
+        }
+
+        const { workingDaysPerMonth, overtimeRate, defaultExpectedHours } = req.body;
+
+        // Validation
+        const updates: any = {};
+
+        if (workingDaysPerMonth !== undefined) {
+            const val = parseInt(workingDaysPerMonth);
+            if (isNaN(val) || val < 1 || val > 31) {
+                res.status(400).json({ error: 'workingDaysPerMonth must be between 1 and 31' });
+                return;
+            }
+            updates.workingDaysPerMonth = val;
+        }
+
+        if (overtimeRate !== undefined) {
+            const val = parseFloat(overtimeRate);
+            if (isNaN(val) || val < 1.0) {
+                res.status(400).json({ error: 'overtimeRate must be >= 1.0' });
+                return;
+            }
+            updates.overtimeRate = val;
+        }
+
+        if (defaultExpectedHours !== undefined) {
+            const val = parseFloat(defaultExpectedHours);
+            if (isNaN(val) || val < 1 || val > 24) {
+                res.status(400).json({ error: 'defaultExpectedHours must be between 1 and 24' });
+                return;
+            }
+            updates.defaultExpectedHours = val;
+        }
+
+        if (Object.keys(updates).length === 0) {
+            res.status(400).json({ error: 'No valid fields to update' });
+            return;
+        }
+
+        const company = await prisma.company.update({
+            where: { id: user.companyId },
+            data: updates,
+            select: {
+                id: true,
+                workingDaysPerMonth: true,
+                overtimeRate: true,
+                defaultExpectedHours: true,
+            }
+        });
+
+        res.json({ success: true, settings: company });
+    } catch (error) {
+        console.error("Update Payroll Settings Error:", error);
+        res.status(500).json({ error: 'Failed to update payroll settings' });
+    }
+};
+
+// Phase 8A: Get Payroll Settings
+export const getPayrollSettings = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        const user = req.user;
+
+        if (!user?.companyId) {
+            res.status(400).json({ error: 'User not linked to company' });
+            return;
+        }
+
+        const company = await prisma.company.findUnique({
+            where: { id: user.companyId },
+            select: {
+                workingDaysPerMonth: true,
+                overtimeRate: true,
+                defaultExpectedHours: true,
+            }
+        });
+
+        if (!company) {
+            res.status(404).json({ error: 'Company not found' });
+            return;
+        }
+
+        res.json({ success: true, settings: company });
+    } catch (error) {
+        console.error("Get Payroll Settings Error:", error);
+        res.status(500).json({ error: 'Failed to fetch payroll settings' });
+    }
+};

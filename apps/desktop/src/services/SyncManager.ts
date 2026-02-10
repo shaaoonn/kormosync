@@ -129,8 +129,19 @@ async function flushSyncQueue(): Promise<number> {
                     await db.delete('syncQueue', item.id!);
                     totalSynced++;
                 } else {
-                    // Increment retry
-                    if (item.retries >= MAX_RETRIES) {
+                    // Fix 7D: Detect FK constraint errors and remove permanently
+                    const errorMsg = result?.error || '';
+                    const isFkError = typeof errorMsg === 'string' && (
+                        errorMsg.includes('Foreign key constraint') ||
+                        errorMsg.includes('P2003') ||
+                        errorMsg.includes('P2025') ||
+                        errorMsg.includes('Record to update not found')
+                    );
+
+                    if (isFkError) {
+                        console.warn(`[SyncManager] FK error for item ${item.id}, removing permanently:`, errorMsg);
+                        await db.delete('syncQueue', item.id!);
+                    } else if (item.retries >= MAX_RETRIES) {
                         console.warn(`[SyncManager] Discarding item ${item.id} after ${MAX_RETRIES} retries`);
                         await db.delete('syncQueue', item.id!);
                     } else {
@@ -138,10 +149,24 @@ async function flushSyncQueue(): Promise<number> {
                     }
                 }
             }
-        } catch (error) {
-            console.error('[SyncManager] Batch sync failed, stopping:', error);
-            // Network error - stop processing
-            break;
+        } catch (error: any) {
+            // Fix 7D: Detect FK constraint errors at batch level
+            const errMsg = error?.response?.data?.error || error?.message || '';
+            const isFkError = typeof errMsg === 'string' && (
+                errMsg.includes('Foreign key constraint') ||
+                errMsg.includes('P2003') ||
+                errMsg.includes('P2025')
+            );
+
+            if (isFkError) {
+                console.warn('[SyncManager] FK error at batch level, removing affected items');
+                for (const item of batch) {
+                    await db.delete('syncQueue', item.id!);
+                }
+            } else {
+                console.error('[SyncManager] Batch sync failed, stopping:', error);
+                break;
+            }
         }
     }
 
