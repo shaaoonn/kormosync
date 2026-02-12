@@ -57,9 +57,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     const idToken = await fbUser.getIdToken();
                     setToken(idToken);
 
-                    // Fetch user details from backend (10s timeout to prevent infinite hang)
+                    // Fetch user details from backend (60s timeout — remote DB 400ms ping + packet loss)
                     const controller = new AbortController();
-                    const fetchTimeout = setTimeout(() => controller.abort(), 10000);
+                    const fetchTimeout = setTimeout(() => controller.abort(), 60000);
                     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
                         headers: { Authorization: `Bearer ${idToken}` },
                         signal: controller.signal,
@@ -81,6 +81,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     }
                 } catch (error) {
                     console.error('Failed to fetch user details:', error);
+                    // Fallback: use Firebase user data so UI doesn't break on timeout
+                    setUser({
+                        uid: fbUser.uid,
+                        email: fbUser.email,
+                        name: fbUser.displayName,
+                        role: 'EMPLOYEE',
+                        companyId: null,
+                        profileImage: null,
+                    });
                 }
             } else {
                 setFirebaseUser(null);

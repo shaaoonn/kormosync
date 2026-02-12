@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Download, Clock, CheckSquare, DollarSign, Monitor, CalendarDays, Briefcase, TrendingUp } from "lucide-react";
 import axios from "axios";
+import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 
@@ -108,7 +109,25 @@ export default function EmployeeDashboard() {
         fetchData();
     }, [token, authLoading]);
 
-    // Auto-refresh earnings every 2 minutes (reflects real-time tracking)
+    // Socket.IO: real-time earnings update on screenshot upload
+    useEffect(() => {
+        if (!token || authLoading) return;
+        const API_BASE = (API_URL || '').replace('/api', '');
+        const socket: Socket = io(API_BASE, { transports: ['websocket'], auth: { token } });
+
+        socket.on('earnings:updated', () => {
+            // Immediate refresh after screenshot upload on desktop
+            axios.get(`${API_URL}/payroll/current-earnings`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }).then(res => {
+                if (res?.data?.success) setCurrentEarnings(res.data.earnings);
+            }).catch(() => {});
+        });
+
+        return () => { socket.disconnect(); };
+    }, [token, authLoading]);
+
+    // Fallback poll: refresh earnings every 2 minutes
     useEffect(() => {
         if (!token || authLoading) return;
         const interval = setInterval(() => {
@@ -119,7 +138,7 @@ export default function EmployeeDashboard() {
                     if (res?.data?.success) setCurrentEarnings(res.data.earnings);
                 }).catch(() => {});
             }
-        }, 120000); // 2 minutes
+        }, 120000); // 2 minutes fallback
         return () => clearInterval(interval);
     }, [token, authLoading]);
 

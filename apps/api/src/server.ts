@@ -38,6 +38,7 @@ import checklistRoutes from './routes/checklistRoutes';
 import customFieldRoutes from './routes/customFieldRoutes';
 import reviewRoutes from './routes/reviewRoutes';
 import noteRoutes from './routes/noteRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 import { startPayrollCron, startAttendanceCron } from './services/payrollCronService';
 import { startRecurringTaskCron } from './cron/recurringTaskCron';
 
@@ -226,6 +227,7 @@ app.use('/api/checklist', checklistRoutes);
 app.use('/api/custom-fields', customFieldRoutes);
 app.use('/api/review', reviewRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Global Error Handler — ensures CORS headers even on multer/validation errors
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

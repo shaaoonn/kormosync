@@ -51,10 +51,13 @@ export async function cacheHistoryLogs(date: string, logs: CachedTimeLog[]): Pro
         const existing = await db.get(STORE_NAME, `logs-${date}`);
         let localEntries: CachedTimeLog[] = [];
         if (existing?.logs) {
-            // Keep local entries whose IDs don't exist in the API response
+            // Keep local entries that haven't been synced and don't match API entries
+            // Use both ID and timestamp matching since local IDs (auto-increment) differ from server UUIDs
             const apiIds = new Set(syncedLogs.map(l => l.id));
+            const apiTimestamps = new Set(syncedLogs.map(l => new Date(l.recordedAt).getTime()));
             localEntries = existing.logs.filter(
-                (l: CachedTimeLog) => !l.synced && !apiIds.has(l.id)
+                (l: CachedTimeLog) => !l.synced && !apiIds.has(l.id) &&
+                    !apiTimestamps.has(new Date(l.recordedAt).getTime())
             );
         }
 

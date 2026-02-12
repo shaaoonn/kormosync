@@ -34,7 +34,7 @@ async function safeSignUrl(path: string | null): Promise<string | null> {
 export const uploadScreenshot = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user?.uid;
-        const { taskId, subTaskId, keystrokes, mouseClicks, activeSeconds, capturedAt, deviceId } = req.body;
+        const { taskId, subTaskId, keystrokes, mouseClicks, activeSeconds, capturedAt, deviceId, activeSubTaskIds, activeSubTaskNames } = req.body;
 
         console.log(`📸 Screenshot: user=${userId?.slice(0,8)}, task=${taskId?.slice(0,8)}, file=${req.file ? `${(req.file.size/1024).toFixed(0)}KB` : 'MISSING'}`);
 
@@ -113,6 +113,8 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
                 taskId,
                 subTaskId: subTaskId || null,
                 deviceId: deviceId || null,
+                activeSubTaskIds: activeSubTaskIds || null,
+                activeSubTaskNames: activeSubTaskNames || null,
             },
         });
 
@@ -142,8 +144,12 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
                     keyboardCount: screenshot.keyboardCount,
                     mouseCount: screenshot.mouseCount,
                     activityScore: screenshot.activityScore,
+                    activeSubTaskNames: activeSubTaskNames || null,
                 });
             }).catch(() => {}); // Non-critical — admin can refresh to see
+
+            // Notify the user's own session that earnings should refresh
+            io.to(`user:${dbUser.id}`).emit('earnings:updated');
         }
         return;
 

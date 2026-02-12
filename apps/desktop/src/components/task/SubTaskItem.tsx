@@ -261,6 +261,7 @@ export const SubTaskItem: React.FC<SubTaskItemProps> = ({
     const activeTimers = useAppStore((state) => state.activeTimers);
     const startTimer = useAppStore((state) => state.startTimer);
     const pauseTimer = useAppStore((state) => state.pauseTimer);
+    const resumeTimer = useAppStore((state) => state.resumeTimer);
     const stopTimer = useAppStore((state) => state.stopTimer);
 
     // Get current timer state for this subtask
@@ -291,12 +292,12 @@ export const SubTaskItem: React.FC<SubTaskItemProps> = ({
         if (isRunning) {
             pauseTimer(subTask.id);
         } else if (isPaused) {
-            // Resume - just unpause
-            pauseTimer(subTask.id); // Toggle pause
+            // Resume from paused state (FIX: was calling pauseTimer which is a no-op when paused)
+            resumeTimer(subTask.id);
         } else {
             startTimer(subTask, task);
         }
-    }, [isLocked, isRunning, isPaused, subTask, task, startTimer, pauseTimer]);
+    }, [isLocked, isRunning, isPaused, subTask, task, startTimer, pauseTimer, resumeTimer]);
 
     const handleStop = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();

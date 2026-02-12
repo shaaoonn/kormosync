@@ -19,17 +19,32 @@ export default function Home() {
       const user = result.user;
       const token = await user.getIdToken();
 
-      // Call backend to sync/check user status
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/sync`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          withCredentials: true
+      // Call backend to sync/check user status (with retry on timeout)
+      let response;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL}/auth/sync`,
+            {},
+            {
+              headers: { Authorization: `Bearer ${token}` },
+              withCredentials: true,
+              timeout: 60000, // 60s — login is one-time, remote DB with 400ms ping needs time
+            }
+          );
+          break; // success
+        } catch (retryErr: any) {
+          const isTimeout = retryErr.code === 'ECONNABORTED' || retryErr.message?.includes('timeout');
+          if (isTimeout && attempt === 0) {
+            setError('সার্ভার ধীর, আবার চেষ্টা করছি...');
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          throw retryErr;
         }
-      );
+      }
 
-      if (response.data.success) {
+      if (response?.data.success) {
         if (response.data.isNew) {
           router.push("/onboarding");
         } else {
@@ -39,9 +54,11 @@ export default function Home() {
 
     } catch (err: any) {
       console.error("Login Failed", err);
-      if (err.code !== 'auth/popup-closed-by-user') {
-        setError(err.message || "Failed to connect to server");
-      }
+      if (err.code === 'auth/popup-closed-by-user') return;
+      const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
+      setError(isTimeout
+        ? 'সার্ভার সাড়া দিচ্ছে না — ইন্টারনেট সংযোগ চেক করুন এবং আবার চেষ্টা করুন'
+        : (err.message || 'সার্ভারে সংযোগ ব্যর্থ হয়েছে'));
     } finally {
       setLoading(false);
     }

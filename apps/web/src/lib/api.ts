@@ -7,7 +7,7 @@ import axios from 'axios';
 const api = axios.create({
     baseURL: process.env.NEXT_PUBLIC_API_URL,
     withCredentials: true,
-    timeout: 15000, // 15s timeout — prevents infinite hang when remote API/DB is slow
+    timeout: 30000, // 30s timeout — remote DB can be slow, 15s caused cascading timeouts
     headers: {
         'Content-Type': 'application/json',
     },

@@ -5,12 +5,8 @@
 // ============================================================
 
 import prisma from '../utils/prisma';
-import { resolveEmployeeSettings } from '../utils/resolveSettings';
 
-// Fix 3D: Floating point precision helper
-function round2(n: number): number {
-    return Math.round(n * 100) / 100;
-}
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // ============================================================
 // Earnings Cache — prevents repeated 8+ DB queries per user
@@ -103,6 +99,16 @@ export interface EarningsBreakdown {
     grossAmount: number;
     netAmount: number;
     currency: string;
+
+    // Diagnostics — only present when earnings are zero, helps debug
+    _debug?: {
+        reason: string;
+        hourlyRate: number;
+        monthlySalary: number;
+        salaryType: string;
+        completedTimeLogCount: number;
+        activeTimeLogCount: number;
+    };
 }
 
 /**
@@ -134,6 +140,21 @@ export async function calculateEarnings(
     periodStart: Date,
     periodEnd: Date
 ): Promise<EarningsBreakdown> {
+    // Guard: if period hasn't started yet, return zeroed earnings
+    if (periodStart > periodEnd) {
+        const zeroResult: EarningsBreakdown = {
+            periodStart, periodEnd,
+            workedHours: 0, workedAmount: 0,
+            paidLeaveDays: 0, leaveHours: 0, leavePay: 0,
+            overtimeHours: 0, overtimePay: 0, overtimeRate: 1.5,
+            penaltyHours: 0, penaltyAmount: 0,
+            salaryType: 'HOURLY', monthlySalary: 0,
+            workedDays: 0, totalWorkingDays: 0, expectedHoursPerDay: 8,
+            grossAmount: 0, netAmount: 0, currency: 'BDT',
+        };
+        return zeroResult;
+    }
+
     // Check cache first — avoids 8+ DB queries if data is fresh
     const cached = getCachedEarnings(userId, periodStart.getTime());
     if (cached) return cached;
@@ -155,12 +176,21 @@ export async function calculateEarnings(
         throw new Error(`User ${userId} not found`);
     }
 
-    // Use per-employee override > company default > hardcoded fallback
-    const resolved = await resolveEmployeeSettings(userId);
-    const overtimeRate = resolved.overtimeRate;
+    // Get company overtime rate and settings
+    let overtimeRate = 1.5;
+    let company: { overtimeRate: number; defaultExpectedHours: number; workingDaysPerMonth: number | null } | null = null;
+    if (user.companyId) {
+        company = await prisma.company.findUnique({
+            where: { id: user.companyId },
+            select: { overtimeRate: true, defaultExpectedHours: true, workingDaysPerMonth: true },
+        });
+        if (company) {
+            overtimeRate = company.overtimeRate;
+        }
+    }
 
     const hourlyRate = user.hourlyRate || 0;
-    const expectedHoursPerDay = resolved.expectedHoursPerDay;
+    const expectedHoursPerDay = user.expectedHoursPerDay || 8.0;
     const expectedSecondsPerDay = expectedHoursPerDay * 3600;
     const salaryType = user.salaryType || 'HOURLY';
     const monthlySalary = user.monthlySalary || 0;
@@ -274,31 +304,31 @@ export async function calculateEarnings(
 
     if (salaryType === 'MONTHLY' && monthlySalary > 0) {
         // Monthly salary: proportional to worked days
-        const dailyRate = totalWorkingDays > 0 ? monthlySalary / totalWorkingDays : 0;
+        const dailyRate = monthlySalary / (company?.workingDaysPerMonth || totalWorkingDays || 22);
         const effectiveWorkedDays = workedDays + paidLeaveDays;
 
-        workedAmount = round2(workedDays * dailyRate);
-        leavePay = round2(paidLeaveDays * dailyRate);
+        workedAmount = parseFloat((workedDays * dailyRate).toFixed(2));
+        leavePay = parseFloat((paidLeaveDays * dailyRate).toFixed(2));
 
         // Overtime for monthly: derive hourly equivalent
         const hourlyEquivalent = totalWorkingDays > 0 && expectedHoursPerDay > 0
             ? monthlySalary / (totalWorkingDays * expectedHoursPerDay)
             : 0;
-        overtimePay = round2(overtimeHours * hourlyEquivalent * overtimeRate);
-        penaltyAmount = round2(penaltyHours * hourlyEquivalent);
+        overtimePay = parseFloat((overtimeHours * hourlyEquivalent * overtimeRate).toFixed(2));
+        penaltyAmount = parseFloat((penaltyHours * hourlyEquivalent).toFixed(2));
 
-        grossAmount = round2(workedAmount + leavePay + overtimePay);
+        grossAmount = parseFloat((workedAmount + leavePay + overtimePay).toFixed(2));
     } else {
         // Hourly: straightforward
-        workedAmount = round2(workedHours * hourlyRate);
-        leavePay = round2(leaveHours * hourlyRate);
-        overtimePay = round2(overtimeHours * hourlyRate * overtimeRate);
-        penaltyAmount = round2((deductionMinutes / 60) * hourlyRate);
+        workedAmount = parseFloat((workedHours * hourlyRate).toFixed(2));
+        leavePay = parseFloat((leaveHours * hourlyRate).toFixed(2));
+        overtimePay = parseFloat((overtimeHours * hourlyRate * overtimeRate).toFixed(2));
+        penaltyAmount = parseFloat(((deductionMinutes / 60) * hourlyRate).toFixed(2));
 
-        grossAmount = round2(workedAmount + leavePay + overtimePay);
+        grossAmount = parseFloat((workedAmount + leavePay + overtimePay).toFixed(2));
     }
 
-    const netAmount = round2(Math.max(0, grossAmount - penaltyAmount));
+    const netAmount = parseFloat(Math.max(0, grossAmount - penaltyAmount).toFixed(2));
 
     // 7. Calculate VirtualHourlyRate & Market Value analysis for MONTHLY users
     let virtualHourlyRate: number | undefined;
@@ -307,8 +337,8 @@ export async function calculateEarnings(
     let savings: number | undefined;
 
     if (salaryType === 'MONTHLY' && monthlySalary > 0 && totalWorkingDays > 0 && expectedHoursPerDay > 0) {
-        virtualHourlyRate = round2(monthlySalary / (totalWorkingDays * expectedHoursPerDay));
-        actualCost = round2(workedHours * virtualHourlyRate);
+        virtualHourlyRate = parseFloat((monthlySalary / (totalWorkingDays * expectedHoursPerDay)).toFixed(2));
+        actualCost = parseFloat((workedHours * virtualHourlyRate).toFixed(2));
 
         // Calculate market value: what it would cost at task/subtask bundle rates
         // REUSE completedTimeLogs + activeTimeLogs from step 2
@@ -368,8 +398,8 @@ export async function calculateEarnings(
             }
         }
 
-        marketValue = round2(totalMarketValue);
-        savings = round2(marketValue - actualCost);
+        marketValue = parseFloat(totalMarketValue.toFixed(2));
+        savings = parseFloat((marketValue - actualCost).toFixed(2));
     }
 
     const result: EarningsBreakdown = {
@@ -397,10 +427,20 @@ export async function calculateEarnings(
         grossAmount,
         netAmount,
         currency,
+        // Diagnostics for zero-earnings debugging
+        _debug: grossAmount === 0 ? {
+            reason: !hourlyRate && !monthlySalary ? 'NO_PAY_RATE' :
+                    completedTimeLogs.length === 0 && activeTimeLogs.length === 0 ? 'NO_TIME_LOGS' : 'ZERO_HOURS',
+            hourlyRate,
+            monthlySalary,
+            salaryType,
+            completedTimeLogCount: completedTimeLogs.length,
+            activeTimeLogCount: activeTimeLogs.length,
+        } : undefined,
     };
 
     // Cache result — shorter TTL when actively tracking (earnings change in real-time)
-    const cacheTTL = activeTimeLogs.length > 0 ? 60 * 1000 : EARNINGS_CACHE_TTL; // 60s if active, 5min if idle
+    const cacheTTL = activeTimeLogs.length > 0 ? 30 * 1000 : EARNINGS_CACHE_TTL; // 30s if active, 5min if idle
     setCachedEarnings(userId, periodStart.getTime(), result, cacheTTL);
 
     return result;

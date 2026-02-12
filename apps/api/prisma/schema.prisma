@@ -423,6 +423,10 @@ model Screenshot {
   mouseCount    Int      @default(0)
   activeSeconds Int      @default(300)
 
+  // Multi-subtask metadata (when worker runs 2+ subtasks concurrently)
+  activeSubTaskIds   String?  // Comma-separated IDs of all concurrent subtasks
+  activeSubTaskNames String?  // Comma-separated names for admin display
+
   // Relations
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   task    Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)

@@ -201,7 +201,7 @@ function OnboardingContent() {
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
                             placeholder="+8801XXXXXXXXX"
-                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                         />
                     </div>
 
@@ -215,7 +215,7 @@ function OnboardingContent() {
                             value={designation}
                             onChange={(e) => setDesignation(e.target.value)}
                             placeholder={mode === 'EMPLOYEE' ? "যেমন: সফটওয়্যার ইঞ্জিনিয়ার" : mode === 'COMPANY' ? "Ex: CEO / Manager" : "Ex: Full Stack Developer"}
-                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                         />
                     </div>
 
@@ -230,7 +230,7 @@ function OnboardingContent() {
                                     value={companyName}
                                     onChange={(e) => setCompanyName(e.target.value)}
                                     placeholder="Ex: Acme Corp"
-                                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                             </div>
 

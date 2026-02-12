@@ -13,6 +13,7 @@ import {
     getCachedHistoryLogs,
     type CachedTimeLog,
 } from '../utils/historyCache';
+import { getQueuedScreenshots } from '../utils/offlineQueue';
 
 const PageWrapper = styled.div`
     display: flex;
@@ -322,23 +323,89 @@ const History: React.FC = () => {
     // Auto-refresh: poll for new entries every 30s when on today's date
     const isToday = selectedDate === new Date().toISOString().split('T')[0];
 
+    // Cache object URLs to prevent memory leaks from repeated createObjectURL calls
+    const blobUrlCache = React.useRef<Map<number, string>>(new Map());
+
+    // Cleanup blob URLs on unmount
+    useEffect(() => {
+        return () => {
+            blobUrlCache.current.forEach(url => URL.revokeObjectURL(url));
+            blobUrlCache.current.clear();
+        };
+    }, []);
+
+    // Load pending offline screenshots and merge them into displayed logs
+    const mergeOfflineEntries = useCallback(async (baseLogs: TimeLog[]): Promise<TimeLog[]> => {
+        try {
+            const queued = await getQueuedScreenshots();
+            if (queued.length === 0) return baseLogs;
+
+            // Filter queued screenshots for the selected date
+            const dateStr = selectedDate;
+            const pendingForDate = queued.filter(q => q.capturedAt.startsWith(dateStr));
+            if (pendingForDate.length === 0) return baseLogs;
+
+            // Convert queued screenshots to TimeLog format
+            const pendingLogs: TimeLog[] = pendingForDate.map(q => {
+                // Reuse cached blob URL or create a new one
+                let blobUrl = blobUrlCache.current.get(q.id);
+                if (!blobUrl && q.imageBlob) {
+                    blobUrl = URL.createObjectURL(q.imageBlob);
+                    blobUrlCache.current.set(q.id, blobUrl);
+                }
+                return {
+                    id: `pending-${q.id}`,
+                    recordedAt: q.capturedAt,
+                    imageUrl: blobUrl,
+                    activityScore: q.activeSeconds > 0 ? Math.round(((q.keystrokes + q.mouseClicks) / q.activeSeconds) * 10) : 0,
+                    keyboardCount: q.keystrokes,
+                    mouseCount: q.mouseClicks,
+                    duration: q.activeSeconds,
+                    taskId: q.taskId,
+                    synced: false,
+                };
+            });
+
+            // Merge: avoid duplicates by timestamp
+            const existingTimestamps = new Set(baseLogs.map(l => new Date(l.recordedAt).getTime()));
+            const newPending = pendingLogs.filter(p => !existingTimestamps.has(new Date(p.recordedAt).getTime()));
+
+            const merged = [...baseLogs, ...newPending].sort(
+                (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime()
+            );
+
+            return merged;
+        } catch (e) {
+            console.warn('Failed to load offline queue entries:', e);
+            return baseLogs;
+        }
+    }, [selectedDate]);
+
     const fetchLogs = useCallback(async (showLoader = true) => {
         if (showLoader) setLoading(true);
 
         // STEP 1: Instantly load from cache
+        let cachedLogs: TimeLog[] = [];
         try {
             const cached = await getCachedHistoryLogs(selectedDate);
             if (cached && cached.logs.length > 0) {
-                setLogs(cached.logs as TimeLog[]);
-                if (showLoader) setLoading(false);
+                cachedLogs = cached.logs as TimeLog[];
                 console.log(`📋 Showing ${cached.logs.length} cached history entries`);
             }
         } catch (e) {
             console.warn('Cache read failed:', e);
         }
 
-        // STEP 2: If offline, stop here
+        // STEP 1.5: Merge offline queue entries into cached logs
+        const logsWithPending = await mergeOfflineEntries(cachedLogs);
+        if (logsWithPending.length > 0) {
+            setLogs(logsWithPending);
+            if (showLoader) setLoading(false);
+        }
+
+        // STEP 2: If offline, show cached + pending and stop
         if (!navigator.onLine) {
+            if (logsWithPending.length === 0) setLogs([]);
             setLoading(false);
             return;
         }
@@ -347,16 +414,18 @@ const History: React.FC = () => {
         try {
             const data = await timeLogApi.getLogs({ date: selectedDate });
             const apiLogs: TimeLog[] = (data || []).map((l: any) => ({ ...l, synced: true }));
-            setLogs(apiLogs);
-            // Cache with merge (preserves local unsynced entries)
-            cacheHistoryLogs(selectedDate, apiLogs as CachedTimeLog[]).catch(() => {});
+            // Merge offline queue entries with fresh API data
+            const mergedWithPending = await mergeOfflineEntries(apiLogs);
+            setLogs(mergedWithPending);
+            // Cache with merge (preserves local unsynced entries) — await to prevent race
+            await cacheHistoryLogs(selectedDate, apiLogs as CachedTimeLog[]);
         } catch (error) {
             console.error("Failed to fetch logs from API:", error);
-            // Cache already shown above, no need to clear
+            // Cache + pending already shown above, no need to clear
         } finally {
             setLoading(false);
         }
-    }, [selectedDate]);
+    }, [selectedDate, mergeOfflineEntries]);
 
     useEffect(() => {
         fetchLogs();

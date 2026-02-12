@@ -91,10 +91,15 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
             ),
         ]);
 
-        const dbUser = await prisma.user.findUnique({
-            where: { firebaseUid: decodedToken.uid },
-            select: { id: true, companyId: true, role: true, email: true, name: true, profileImage: true }
-        });
+        const dbUser = await Promise.race([
+            prisma.user.findUnique({
+                where: { firebaseUid: decodedToken.uid },
+                select: { id: true, companyId: true, role: true, email: true, name: true, profileImage: true }
+            }),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('DB lookup timeout (10s)')), 10000)
+            ),
+        ]);
 
         const user: ExtendedUser = {
             ...decodedToken,

@@ -551,72 +551,104 @@ const RejectBtn = styled.button`
     &:disabled { opacity: 0.5; cursor: not-allowed; }
 `;
 
-// Earnings Section
-const EarningsCard = styled.div`
-    background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
-    border-radius: ${theme.borderRadius.lg};
-    padding: ${theme.spacing.lg};
+// Combined Earnings + Duty Compact Block
+const CompactOverviewRow = styled.div`
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: ${theme.spacing.sm};
     margin-bottom: ${theme.spacing.lg};
+`;
+
+const CompactPanel = styled.div<{ $variant: 'earnings' | 'duty' }>`
+    background: ${({ $variant }) =>
+        $variant === 'earnings'
+            ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+            : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'};
+    border-radius: ${theme.borderRadius.lg};
+    padding: ${theme.spacing.md};
     color: white;
     position: relative;
     overflow: hidden;
+    min-height: 0;
 
     &::before {
         content: '';
         position: absolute;
-        top: -50%;
-        right: -20%;
-        width: 200px;
-        height: 200px;
-        background: rgba(255,255,255,0.1);
+        top: -40%;
+        right: -15%;
+        width: 120px;
+        height: 120px;
+        background: rgba(255,255,255,0.08);
         border-radius: 50%;
     }
 `;
 
-const EarningsLabel = styled.div`
-    font-size: ${theme.typography.fontSize.sm};
+const CompactPanelLabel = styled.div`
+    font-size: 11px;
     opacity: 0.85;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+`;
+
+const CompactPanelValue = styled.div`
+    font-size: 22px;
+    font-weight: ${theme.typography.fontWeight.bold};
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.2;
     margin-bottom: 4px;
 `;
 
-const EarningsAmount = styled.div`
-    font-size: 28px;
-    font-weight: ${theme.typography.fontWeight.bold};
-    margin-bottom: ${theme.spacing.xs};
-    font-family: 'JetBrains Mono', monospace;
+const CompactProgressBarWrapper = styled.div`
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 4px;
 `;
 
-const EarningsBreakdownRow = styled.div`
-    display: flex;
-    gap: ${theme.spacing.lg};
-    font-size: ${theme.typography.fontSize.xs};
-    opacity: 0.8;
-    flex-wrap: wrap;
+const CompactProgressBarFill = styled.div<{ $percent: number; $color: string }>`
+    height: 100%;
+    width: ${({ $percent }) => Math.min(100, $percent)}%;
+    background: ${({ $color }) => $color};
+    border-radius: 4px;
+    transition: width 0.5s ease;
 `;
 
-const EarningsLeaveRow = styled.div`
+const CompactSubtext = styled.div`
+    font-size: 10px;
+    opacity: 0.75;
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    margin-top: ${theme.spacing.sm};
-    padding-top: ${theme.spacing.sm};
-    border-top: 1px solid rgba(255,255,255,0.2);
+    align-items: center;
 `;
 
-const LeaveBalanceChip = styled.div`
-    display: flex;
-    gap: ${theme.spacing.md};
-    font-size: ${theme.typography.fontSize.xs};
-    opacity: 0.85;
+const CompactBadge = styled.span<{ $color: string }>`
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 6px;
+    border-radius: ${theme.borderRadius.full};
+    font-size: 9px;
+    font-weight: 600;
+    background: ${({ $color }) => $color}40;
+`;
+
+const CompactDebugMsg = styled.div`
+    font-size: 10px;
+    opacity: 0.8;
+    margin-top: 2px;
 `;
 
 const LeaveRequestBtn = styled.button`
-    padding: 4px 12px;
+    padding: 2px 8px;
     background: rgba(255,255,255,0.2);
     color: white;
     border: 1px solid rgba(255,255,255,0.3);
     border-radius: ${theme.borderRadius.full};
-    font-size: ${theme.typography.fontSize.xs};
+    font-size: 10px;
     font-weight: 600;
     cursor: pointer;
     font-family: ${theme.typography.fontFamily};
@@ -625,71 +657,6 @@ const LeaveRequestBtn = styled.button`
     &:hover {
         background: rgba(255,255,255,0.3);
     }
-`;
-
-// Duty Achievement Progress Card
-const DutyCard = styled.div`
-    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #a855f7 100%);
-    border-radius: ${theme.borderRadius.lg};
-    padding: ${theme.spacing.lg};
-    margin-bottom: ${theme.spacing.lg};
-    color: white;
-    position: relative;
-    overflow: hidden;
-
-    &::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        right: -20%;
-        width: 200px;
-        height: 200px;
-        background: rgba(255,255,255,0.08);
-        border-radius: 50%;
-    }
-`;
-
-const DutyTitle = styled.div`
-    font-size: ${theme.typography.fontSize.sm};
-    opacity: 0.85;
-    margin-bottom: ${theme.spacing.sm};
-`;
-
-const DutyProgressBarWrapper = styled.div`
-    width: 100%;
-    height: 12px;
-    background: rgba(255,255,255,0.2);
-    border-radius: 6px;
-    overflow: hidden;
-    margin-bottom: ${theme.spacing.sm};
-`;
-
-const DutyProgressBarFill = styled.div<{ $percent: number; $achieved: boolean }>`
-    height: 100%;
-    width: ${({ $percent }) => Math.min(100, $percent)}%;
-    background: ${({ $achieved }) => $achieved ? '#34d399' : '#fbbf24'};
-    border-radius: 6px;
-    transition: width 0.5s ease;
-`;
-
-const DutyStats = styled.div`
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: ${theme.typography.fontSize.xs};
-    opacity: 0.9;
-`;
-
-const DutyBadge = styled.span<{ $achieved: boolean }>`
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: ${theme.borderRadius.full};
-    font-size: ${theme.typography.fontSize.xs};
-    font-weight: 600;
-    background: ${({ $achieved }) => $achieved ? 'rgba(52, 211, 153, 0.3)' : 'rgba(251, 191, 36, 0.3)'};
-    color: ${({ $achieved }) => $achieved ? '#d1fae5' : '#fef3c7'};
 `;
 
 const SectionEmptyMessage = styled.div`
@@ -721,7 +688,7 @@ function getDeadlineInfo(deadline?: string): { text: string; hoursLeft: number }
 
 export const Dashboard: React.FC = () => {
     const navigate = useNavigate();
-    const { tasks, activeTimers, isLoading, setSelectedTask, setCurrentView, fetchTasks } = useAppStore();
+    const { tasks, activeTimers, taskTrackers, isLoading, setSelectedTask, setCurrentView, fetchTasks } = useAppStore();
     const tickCounter = useAppStore((s) => s.tickCounter);
     const [searchQuery, setSearchQuery] = useState('');
     const [pendingAssignments, setPendingAssignments] = useState<TaskAssignment[]>([]);
@@ -735,10 +702,35 @@ export const Dashboard: React.FC = () => {
     // Fetch current earnings
     const fetchCurrentEarnings = async () => {
         try {
+            console.log('[earningsApi] Fetching current earnings...');
             const earnings = await earningsApi.getCurrentEarnings();
+            console.log('[earningsApi] Response:', earnings);
             setCurrentEarnings(earnings);
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to fetch current earnings:', err);
+            // Set fallback so UI doesn't stay on "loading" forever
+            setCurrentEarnings({
+                periodStart: new Date().toISOString(),
+                periodEnd: new Date().toISOString(),
+                workedHours: 0,
+                workedAmount: 0,
+                paidLeaveDays: 0,
+                leaveHours: 0,
+                leavePay: 0,
+                overtimeHours: 0,
+                overtimePay: 0,
+                overtimeRate: 1.5,
+                penaltyHours: 0,
+                penaltyAmount: 0,
+                salaryType: 'HOURLY',
+                monthlySalary: 0,
+                workedDays: 0,
+                totalWorkingDays: 0,
+                grossAmount: 0,
+                netAmount: 0,
+                currency: 'BDT',
+                _debug: { reason: 'FETCH_ERROR', hourlyRate: 0, monthlySalary: 0, salaryType: 'HOURLY', completedTimeLogCount: 0, activeTimeLogCount: 0 },
+            } as any);
         }
     };
 
@@ -809,9 +801,8 @@ export const Dashboard: React.FC = () => {
                 // Always fetch tasks first (cache-first, works offline)
                 fetchTasks();
 
-                // Sequential API calls — prevents overwhelming the API with 5+ concurrent requests on load
-                // Each call completes before the next starts. If API is slow/down, we bail early
-                // instead of 5 requests all waiting 15s each (= 75s total freeze).
+                // Parallel API calls — each independent, wrapped in try/catch
+                // Auth sync first (critical), then all dashboard data in parallel
                 if (navigator.onLine) {
                     (async () => {
                         try {
@@ -821,11 +812,13 @@ export const Dashboard: React.FC = () => {
                         } catch (err) {
                             console.warn('User sync failed, continuing with cached data:', err);
                         }
-                        // Each subsequent call is independent — wrapped in try/catch so one failure doesn't stop others
-                        try { await fetchPendingAssignments(); } catch { /* non-critical */ }
-                        try { await fetchCurrentEarnings(); } catch { /* non-critical */ }
-                        try { await fetchLeaveBalance(); } catch { /* non-critical */ }
-                        try { await fetchDutyProgress(); } catch { /* non-critical */ }
+                        // Fire all dashboard data fetches in parallel — no need to wait sequentially
+                        await Promise.allSettled([
+                            fetchPendingAssignments(),
+                            fetchCurrentEarnings(),
+                            fetchLeaveBalance(),
+                            fetchDutyProgress(),
+                        ]);
                     })();
                 }
             } else {
@@ -836,32 +829,79 @@ export const Dashboard: React.FC = () => {
         return () => unsubscribe();
     }, [fetchTasks, navigate]);
 
-    // Auto-refresh duty progress every 5 minutes
+    // Auto-refresh duty progress every 5 minutes (for all salary types)
     useEffect(() => {
-        if (!dutyProgress || dutyProgress.salaryType !== 'MONTHLY') return;
+        if (!dutyProgress) return;
         const interval = setInterval(() => {
             if (navigator.onLine) fetchDutyProgress();
         }, 5 * 60 * 1000);
         return () => clearInterval(interval);
-    }, [dutyProgress?.salaryType]);
+    }, [dutyProgress]);
+
+    // Midnight auto-reset: refresh duty progress at midnight
+    useEffect(() => {
+        const now = new Date();
+        const midnight = new Date(now);
+        midnight.setHours(24, 0, 0, 0);
+        const msUntilMidnight = midnight.getTime() - now.getTime();
+
+        const timer = setTimeout(() => {
+            if (navigator.onLine) fetchDutyProgress();
+        }, msUntilMidnight);
+
+        return () => clearTimeout(timer);
+    }, []);
 
     // Listen for earnings-update events (dispatched after each screenshot upload)
     useEffect(() => {
         const handler = () => {
-            // Debounce: wait 2s for server-side cache invalidation to complete, then refetch
+            // Quick refetch — cache already invalidated server-side after screenshot upload
             setTimeout(() => {
                 if (navigator.onLine) fetchCurrentEarnings().catch(() => {});
-            }, 2000);
+            }, 500);
         };
         window.addEventListener('earnings-update', handler);
         return () => window.removeEventListener('earnings-update', handler);
     }, []);
 
-    // Calculate global stats
+    // Fallback poll: refresh earnings every 5 minutes (primary trigger is screenshot events above)
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (navigator.onLine && document.visibilityState === 'visible') {
+                fetchCurrentEarnings().catch(() => {});
+            }
+        }, 300000); // 5 min fallback
+        return () => clearInterval(interval);
+    }, []);
+
+    // Safety timeout: if earnings still null after 15 seconds, set fallback
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            if (!currentEarnings) {
+                console.warn('[earningsApi] Safety timeout — earnings still null after 15s, setting fallback');
+                setCurrentEarnings({
+                    periodStart: new Date().toISOString(),
+                    periodEnd: new Date().toISOString(),
+                    workedHours: 0, workedAmount: 0,
+                    paidLeaveDays: 0, leaveHours: 0, leavePay: 0,
+                    overtimeHours: 0, overtimePay: 0, overtimeRate: 1.5,
+                    penaltyHours: 0, penaltyAmount: 0,
+                    salaryType: 'HOURLY', monthlySalary: 0,
+                    workedDays: 0, totalWorkingDays: 0,
+                    grossAmount: 0, netAmount: 0, currency: 'BDT',
+                    _debug: { reason: 'TIMEOUT', hourlyRate: 0, monthlySalary: 0, salaryType: 'HOURLY', completedTimeLogCount: 0, activeTimeLogCount: 0 },
+                } as any);
+            }
+        }, 15000);
+        return () => clearTimeout(timeout);
+    }, [currentEarnings]);
+
+    // Calculate global stats — uses taskTrackers wall-clock to avoid double-counting concurrent subtasks
     const stats = useMemo(() => {
-        const totalTrackedToday = Object.values(activeTimers).reduce(
-            (acc, timer) => acc + timer.elapsedSeconds, 0
-        );
+        const totalTrackedToday = Object.values(taskTrackers).reduce((acc, tracker) => {
+            if (tracker.isPaused) return acc + tracker.wallClockAccumulated;
+            return acc + tracker.wallClockAccumulated + Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000);
+        }, 0);
         const totalTasks = tasks.length;
         const completedTasks = tasks.filter(
             (t) => t.status === 'DONE' || t.subTasks?.every((st) => st.status === 'COMPLETED')
@@ -874,7 +914,39 @@ export const Dashboard: React.FC = () => {
         }, 0);
         const activeNow = Object.values(activeTimers).filter(t => !t.isPaused).length;
         return { totalTrackedToday, totalTasks, completedTasks, totalEarnings, activeNow };
-    }, [tasks, activeTimers]);
+    }, [tasks, activeTimers, taskTrackers, tickCounter]);
+
+    // Effective duty progress — show for ALL users (fallback 8h default if API returns nothing)
+    const effectiveDutyProgress = useMemo(() => {
+        if (dutyProgress && dutyProgress.expectedDailySeconds > 0) return dutyProgress;
+        return {
+            todayWorkedSeconds: 0,
+            minDailySeconds: 8 * 3600,
+            expectedDailySeconds: 8 * 3600,
+            progressPercent: 0,
+            attendanceAchieved: false,
+            salaryType: 'HOURLY',
+            currency: 'BDT',
+        } as DutyProgress;
+    }, [dutyProgress]);
+
+    // Live-ticking worked seconds: API base + currently-running task trackers
+    const liveWorkedSeconds = useMemo(() => {
+        const base = effectiveDutyProgress.todayWorkedSeconds || 0;
+        let liveExtra = 0;
+        Object.values(taskTrackers).forEach(tracker => {
+            if (!tracker.isPaused) {
+                liveExtra += Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000);
+            }
+        });
+        return base + liveExtra;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [effectiveDutyProgress.todayWorkedSeconds, taskTrackers, tickCounter]);
+
+    const liveProgressPercent = effectiveDutyProgress.expectedDailySeconds > 0
+        ? Math.min(100, Math.round((liveWorkedSeconds / effectiveDutyProgress.expectedDailySeconds) * 100))
+        : 0;
+    const liveAttendanceAchieved = liveWorkedSeconds >= effectiveDutyProgress.minDailySeconds;
 
     // Search filter
     const searchedTasks = useMemo(() => {
@@ -1082,69 +1154,77 @@ export const Dashboard: React.FC = () => {
             </Header>
 
             <Content>
-                {/* Earnings Card */}
-                {currentEarnings && (
-                    <EarningsCard>
-                        <EarningsLabel>শেষ বেতনের পর থেকে এ পর্যন্ত</EarningsLabel>
-                        <EarningsAmount>
-                            ৳{currentEarnings.netAmount?.toLocaleString('bn-BD', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
-                        </EarningsAmount>
-                        <EarningsBreakdownRow>
-                            <span>{(currentEarnings.workedHours || 0).toFixed(1)} ঘন্টা কাজ</span>
-                            {currentEarnings.paidLeaveDays > 0 && (
-                                <span>{currentEarnings.paidLeaveDays} দিন ছুটি (৳{(currentEarnings.leavePay || 0).toLocaleString()})</span>
-                            )}
-                            {currentEarnings.overtimeHours > 0 && (
-                                <span>{currentEarnings.overtimeHours.toFixed(1)}h ওভারটাইম (৳{(currentEarnings.overtimePay || 0).toLocaleString()})</span>
-                            )}
-                            {currentEarnings.penaltyAmount > 0 && (
-                                <span style={{ color: '#fca5a5' }}>-৳{currentEarnings.penaltyAmount.toLocaleString()} জরিমানা</span>
-                            )}
-                        </EarningsBreakdownRow>
-                        {leaveBalance && (
-                            <EarningsLeaveRow>
-                                <LeaveBalanceChip>
-                                    <span>বেতনসহ ছুটি: {(leaveBalance.paidRemaining ?? (leaveBalance.paidLeave - leaveBalance.paidUsed))} দিন</span>
-                                    <span>|</span>
-                                    <span>অসুস্থতা: {(leaveBalance.sickRemaining ?? (leaveBalance.sickLeave - leaveBalance.sickUsed))} দিন</span>
-                                </LeaveBalanceChip>
-                                <LeaveRequestBtn onClick={() => navigate('/leave')}>
-                                    🏖️ ছুটির আবেদন
-                                </LeaveRequestBtn>
-                            </EarningsLeaveRow>
+                {/* Combined Earnings + Duty Progress Compact Block */}
+                <CompactOverviewRow>
+                    {/* Left: Earnings Panel */}
+                    <CompactPanel $variant="earnings">
+                        <CompactPanelLabel>💰 শেষ বেতনের পর</CompactPanelLabel>
+                        {!currentEarnings ? (
+                            <CompactPanelValue style={{ opacity: 0.5 }}>৳ ...</CompactPanelValue>
+                        ) : (
+                            <>
+                                <CompactPanelValue>
+                                    ৳{currentEarnings.netAmount?.toLocaleString('bn-BD', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                                </CompactPanelValue>
+                                {(currentEarnings as any)?._debug?.reason === 'NO_PAY_RATE' && (
+                                    <CompactDebugMsg style={{ color: '#fbbf24' }}>⚠️ বেতনের হার সেট নেই</CompactDebugMsg>
+                                )}
+                                {(currentEarnings as any)?._debug?.reason === 'NO_TIME_LOGS' && (
+                                    <CompactDebugMsg style={{ color: '#94a3b8' }}>কোনো কাজ রেকর্ড হয়নি</CompactDebugMsg>
+                                )}
+                                {((currentEarnings as any)?._debug?.reason === 'FETCH_ERROR' || (currentEarnings as any)?._debug?.reason === 'TIMEOUT') && (
+                                    <CompactDebugMsg style={{ color: '#fca5a5' }}>
+                                        ⚠️ লোড ব্যর্থ{' '}
+                                        <span
+                                            onClick={() => { setCurrentEarnings(null); fetchCurrentEarnings(); }}
+                                            style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                        >🔄 আবার</span>
+                                    </CompactDebugMsg>
+                                )}
+                                {!(currentEarnings as any)?._debug && (
+                                    <CompactSubtext>
+                                        <span>{(currentEarnings.workedHours || 0).toFixed(1)}h কাজ</span>
+                                        {currentEarnings.overtimeHours > 0 && <span>+{currentEarnings.overtimeHours.toFixed(1)}h OT</span>}
+                                    </CompactSubtext>
+                                )}
+                                {leaveBalance && (
+                                    <CompactSubtext style={{ marginTop: '4px' }}>
+                                        <span>ছুটি: {(leaveBalance.paidRemaining ?? (leaveBalance.paidLeave - leaveBalance.paidUsed))}দিন</span>
+                                        <LeaveRequestBtn onClick={() => navigate('/leave')}>🏖️ আবেদন</LeaveRequestBtn>
+                                    </CompactSubtext>
+                                )}
+                            </>
                         )}
-                    </EarningsCard>
-                )}
+                    </CompactPanel>
 
-                {/* Duty Achievement Progress — for MONTHLY salary users */}
-                {dutyProgress && dutyProgress.salaryType === 'MONTHLY' && dutyProgress.expectedDailySeconds > 0 && (
-                    <DutyCard>
-                        <DutyTitle>📊 আজকের ডিউটি অর্জন</DutyTitle>
-                        <DutyProgressBarWrapper>
-                            <DutyProgressBarFill
-                                $percent={dutyProgress.progressPercent}
-                                $achieved={dutyProgress.attendanceAchieved}
+                    {/* Right: Duty Progress Panel */}
+                    <CompactPanel $variant="duty">
+                        <CompactPanelLabel>📊 আজ</CompactPanelLabel>
+                        <CompactPanelValue>
+                            {formatDuration(liveWorkedSeconds)}
+                        </CompactPanelValue>
+                        <CompactProgressBarWrapper>
+                            <CompactProgressBarFill
+                                $percent={liveProgressPercent}
+                                $color={liveAttendanceAchieved ? '#34d399' : '#fbbf24'}
                             />
-                        </DutyProgressBarWrapper>
-                        <DutyStats>
-                            <span>
-                                {formatDuration(dutyProgress.todayWorkedSeconds)} / {formatDuration(dutyProgress.expectedDailySeconds)}
-                                {' '}({dutyProgress.progressPercent}%)
-                            </span>
-                            <DutyBadge $achieved={dutyProgress.attendanceAchieved}>
-                                {dutyProgress.attendanceAchieved
-                                    ? '✅ উপস্থিতি সম্পন্ন'
-                                    : `⏳ আর ${formatDuration(Math.max(0, dutyProgress.minDailySeconds - dutyProgress.todayWorkedSeconds))} প্রয়োজন`
+                        </CompactProgressBarWrapper>
+                        <CompactSubtext>
+                            <span>{formatDuration(effectiveDutyProgress.expectedDailySeconds)} এর মধ্যে {liveProgressPercent}%</span>
+                            <CompactBadge $color={liveAttendanceAchieved ? '#34d399' : '#fbbf24'}>
+                                {liveAttendanceAchieved
+                                    ? '✅ সম্পন্ন'
+                                    : `⏳ ${formatDuration(Math.max(0, effectiveDutyProgress.minDailySeconds - liveWorkedSeconds))} বাকি`
                                 }
-                            </DutyBadge>
-                        </DutyStats>
-                        {dutyProgress.virtualHourlyRate && (
-                            <DutyStats style={{ marginTop: '8px', opacity: 0.7 }}>
-                                <span>ভার্চুয়াল ঘন্টা রেট: ৳{dutyProgress.virtualHourlyRate.toFixed(0)}/hr</span>
-                            </DutyStats>
+                            </CompactBadge>
+                        </CompactSubtext>
+                        {effectiveDutyProgress.virtualHourlyRate && (
+                            <CompactSubtext style={{ marginTop: '2px' }}>
+                                <span>৳{effectiveDutyProgress.virtualHourlyRate.toFixed(0)}/hr</span>
+                            </CompactSubtext>
                         )}
-                    </DutyCard>
-                )}
+                    </CompactPanel>
+                </CompactOverviewRow>
 
                 {/* Stats */}
                 <StatsGrid>

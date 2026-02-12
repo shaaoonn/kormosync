@@ -258,6 +258,20 @@ export const startTask = async (req: Request, res: Response) => {
         const user = getUser(req);
         if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
+        // Security: Verify task exists, company access, and user is assigned
+        const taskCheck = await prisma.task.findUnique({
+            where: { id: taskId },
+            select: { companyId: true, assignees: { select: { id: true } } },
+        });
+        if (!taskCheck) return res.status(404).json({ error: 'Task not found' });
+        if (taskCheck.companyId && user.companyId && taskCheck.companyId !== user.companyId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        const isAssigned = taskCheck.assignees.some((a: { id: string }) => a.id === user.id);
+        if (!isAssigned && !['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            return res.status(403).json({ error: 'You are not assigned to this task' });
+        }
+
         // Check if task is blocked by incomplete dependencies
         const blockers = await prisma.taskDependency.findMany({
             where: { taskId },
@@ -291,12 +305,21 @@ export const startTask = async (req: Request, res: Response) => {
 export const stopTask = async (req: Request, res: Response) => {
     try {
         const { timeLogId } = req.body;
+        const user = getUser(req);
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
         const endTime = new Date();
 
-        const timeLog = await prisma.timeLog.findUnique({ where: { id: timeLogId } });
+        const timeLog = await prisma.timeLog.findUnique({
+            where: { id: timeLogId },
+            include: { task: { select: { companyId: true } } },
+        });
         if (!timeLog) {
             return res.status(404).json({ error: 'Time log not found' });
-            // Added explicit return to satisfy "Not all code paths return a value" if interpreted strictly
+        }
+
+        // Security: Verify company access
+        if ((timeLog as any).task?.companyId && user.companyId && (timeLog as any).task.companyId !== user.companyId) {
+            return res.status(403).json({ error: 'Access denied' });
         }
 
         const durationSeconds = Math.floor((endTime.getTime() - timeLog.startTime.getTime()) / 1000);
@@ -540,6 +563,11 @@ export const updateTask = async (req: Request, res: Response) => {
             },
         });
 
+        // Security: Verify company access
+        if (oldTask?.companyId && user?.companyId && oldTask.companyId !== user.companyId) {
+            return res.status(403).json({ error: 'Access denied — different company' });
+        }
+
         // Fix 4F: employeeCanComplete enforcement
         if (data.status === 'DONE' && user.role === 'EMPLOYEE') {
             const taskForCheck = await prisma.task.findUnique({ where: { id: taskId }, select: { employeeCanComplete: true } });
@@ -701,6 +729,16 @@ export const deleteTask = async (req: Request, res: Response) => {
         const { taskId } = req.params;
         const user = getUser(req);
 
+        // Security: Verify task exists + company access + admin role
+        const task = await prisma.task.findUnique({ where: { id: taskId }, select: { companyId: true } });
+        if (!task) return res.status(404).json({ error: 'Task not found' });
+        if (user?.companyId && task.companyId && task.companyId !== user.companyId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        if (!user || !['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+            return res.status(403).json({ error: 'Only administrators can delete tasks' });
+        }
+
         // Audit log before deletion (cascade will remove audit logs too, but we log the intent)
         if (user?.id) {
             await logAudit({ taskId, userId: user.id, action: 'DELETED' });
@@ -727,6 +765,11 @@ export const toggleTaskActive = async (req: Request, res: Response) => {
 
         const task = await prisma.task.findUnique({ where: { id: taskId } });
         if (!task) return res.status(404).json({ error: 'Task not found' });
+
+        // Security: Verify company access
+        if (task.companyId && user.companyId && task.companyId !== user.companyId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
 
         const newIsActive = !task.isActive;
         const updatedTask = await prisma.task.update({

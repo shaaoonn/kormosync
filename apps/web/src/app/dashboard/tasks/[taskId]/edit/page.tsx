@@ -158,6 +158,14 @@ export default function EditTaskPage() {
     const [maxBudget, setMaxBudget] = useState<number | undefined>();
     const [reviewerId, setReviewerId] = useState('');
 
+    // Tracking Toggles (Phase 11: parity with create form)
+    const [screenshotEnabled, setScreenshotEnabled] = useState(true);
+    const [activityEnabled, setActivityEnabled] = useState(true);
+    const [allowRemoteCapture, setAllowRemoteCapture] = useState(true);
+    const [employeeCanComplete, setEmployeeCanComplete] = useState(true);
+    const [breakReminderEnabled, setBreakReminderEnabled] = useState(false);
+    const [breakAfterHours, setBreakAfterHours] = useState(2);
+
     // Advanced Settings
     const [monitoringMode, setMonitoringMode] = useState<'TRANSPARENT' | 'STEALTH'>('TRANSPARENT');
     const [activityThreshold, setActivityThreshold] = useState(40);
@@ -218,6 +226,12 @@ export default function EditTaskPage() {
                 setAttachments(task.attachments || []);
                 setVideoUrl(task.videoUrl || null);
                 setScreenshotInterval(task.screenshotInterval || 5);
+                setScreenshotEnabled(task.screenshotEnabled !== false);
+                setActivityEnabled(task.activityEnabled !== false);
+                setAllowRemoteCapture(task.allowRemoteCapture !== false);
+                setEmployeeCanComplete(task.employeeCanComplete !== false);
+                setBreakReminderEnabled(!!task.breakReminderEnabled);
+                setBreakAfterHours(task.breakAfterHours || 2);
                 setMonitoringMode(task.monitoringMode || 'TRANSPARENT');
                 setActivityThreshold(task.activityThreshold ?? 40);
                 setPenaltyEnabled(!!task.penaltyEnabled);
@@ -352,7 +366,7 @@ export default function EditTaskPage() {
         try {
             const token = await auth.currentUser?.getIdToken();
             const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/upload`, formData, { headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` } });
-            setAttachments(prev => [...prev, res.data.url]);
+            setAttachments(prev => [...prev, res.data.key || res.data.url]);
         } catch (e) { toast.error("Upload failed"); }
     };
     const handleTaskFileUpload = async (files: FileList | null, tId: string) => {
@@ -412,6 +426,13 @@ export default function EditTaskPage() {
                 attachments, videoUrl: finalVideoUrl,
                 manualAllowedApps: requiredAppsStr.split(',').map(s => s.trim()).filter(Boolean),
                 screenshotInterval,
+                // Tracking toggles
+                screenshotEnabled,
+                activityEnabled,
+                allowRemoteCapture,
+                employeeCanComplete,
+                breakReminderEnabled,
+                breakAfterHours: breakReminderEnabled ? breakAfterHours : 2,
                 publishStatus,
                 // Advanced Settings
                 monitoringMode,
@@ -557,6 +578,46 @@ export default function EditTaskPage() {
                     </div>
                 </div>
 
+                {/* Tracking Toggles */}
+                <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
+                    <h3 className="text-sm font-bold text-indigo-800">ট্র্যাকিং সেটিংস</h3>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={screenshotEnabled} onChange={e => setScreenshotEnabled(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">📷 স্ক্রিনশট রিসিভ করবে</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={activityEnabled} onChange={e => setActivityEnabled(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">📊 অ্যাক্টিভিটি ট্র্যাক করবে (কীবোর্ড/মাউস)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={allowRemoteCapture} onChange={e => setAllowRemoteCapture(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">📸 রিমোট স্ক্রিনশট ক্যাপচার (অ্যাডমিন যেকোনো সময় স্ক্রিনশট নিতে পারবে)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={employeeCanComplete} onChange={e => setEmployeeCanComplete(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">✅ কর্মী কাজ শেষ করতে পারবে (বন্ধ থাকলে শুধু এডমিন শেষ করতে পারবে)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={breakReminderEnabled} onChange={e => setBreakReminderEnabled(e.target.checked)}
+                            className="w-4 h-4 accent-indigo-600 rounded" />
+                        <span className="text-sm text-gray-700">🧘 বিরতির পরামর্শ দিন</span>
+                    </label>
+                    {breakReminderEnabled && (
+                        <div className="ml-7 max-w-xs">
+                            <label className="block text-xs font-medium text-gray-600">কত ঘন্টা একটানা কাজের পর?</label>
+                            <select className="mt-1 w-full p-2 border rounded-lg text-sm" value={breakAfterHours} onChange={e => setBreakAfterHours(parseFloat(e.target.value))}>
+                                {[0.5, 1, 1.5, 2, 2.5, 3, 4].map(h => (
+                                    <option key={h} value={h}>{h} ঘন্টা</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Allowed Apps (comma separated)</label>
                     <input type="text" className="mt-1 w-full p-2 border rounded-lg" value={requiredAppsStr} onChange={e => setRequiredAppsStr(e.target.value)} placeholder="Visual Studio Code, Chrome, etc." />
@@ -692,15 +753,59 @@ export default function EditTaskPage() {
                     </div>
                 )}
 
-                {/* Attachments & Assignees (same as Create) */}
+                {/* Attachments & Media */}
                 <div className="border-t pt-6 space-y-4">
-                    <label>Attachments</label>
+                    <label className="block text-sm font-bold text-gray-800">📎 ফাইল ও সংযুক্তি</label>
+
+                    {/* Existing Video / Screen Recording */}
+                    {videoUrl && !recordedBlob && (
+                        <div className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <Video className="w-5 h-5 text-indigo-600" />
+                                <span className="text-sm text-gray-700">স্ক্রিন রেকর্ডিং সংযুক্ত</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button type="button" onClick={() => window.open(videoUrl, '_blank')}
+                                    className="px-3 py-1 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200">▶️ দেখুন</button>
+                                <button type="button" onClick={() => setVideoUrl(null)}
+                                    className="px-3 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 flex items-center gap-1"><Trash2 className="w-3 h-3" /> মুছুন</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Upload & Record Buttons */}
                     <div className="flex gap-4">
                         <input type="file" ref={fileInputRef} onChange={e => handleMainFileUpload(e.target.files)} className="hidden" />
-                        <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 border rounded flex gap-2"><Upload className="w-4 h-4" /> Upload</button>
-                        {!isRecording && !recordedBlob ? <button onClick={startRecording} className="px-4 py-2 border border-red-200 bg-red-50 text-red-600 rounded flex gap-2"><Video className="w-4 h-4" /> Record</button> : <button onClick={stopRecording} className="px-4 py-2 bg-red-600 text-white rounded animate-pulse">Stop ({formatRecordTime(recordingTime)})</button>}
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-2 border rounded flex gap-2 hover:bg-gray-50"><Upload className="w-4 h-4" /> ফাইল আপলোড</button>
+                        {!isRecording && !recordedBlob ? (
+                            <button type="button" onClick={startRecording} className="px-4 py-2 border border-red-200 bg-red-50 text-red-600 rounded flex gap-2 hover:bg-red-100">
+                                <Video className="w-4 h-4" /> {videoUrl ? 'রিপ্লেস রেকর্ডিং' : 'রেকর্ড'}
+                            </button>
+                        ) : (
+                            <button type="button" onClick={stopRecording} className="px-4 py-2 bg-red-600 text-white rounded animate-pulse">
+                                <StopCircle className="w-4 h-4 inline mr-1" /> Stop ({formatRecordTime(recordingTime)})
+                            </button>
+                        )}
                     </div>
-                    <div className="text-xs text-gray-500">{attachments.map((a, i) => <div key={i}>{a}</div>)}</div>
+
+                    {/* Existing Attachments with Delete */}
+                    {attachments.length > 0 && (
+                        <div className="space-y-2">
+                            {attachments.map((url, i) => {
+                                const fileName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'file');
+                                return (
+                                    <div key={i} className="flex items-center justify-between p-2 bg-gray-50 border rounded-lg group">
+                                        <span className="text-sm text-gray-600 truncate flex-1">{fileName}</span>
+                                        <button type="button" onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                                            className="ml-2 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="মুছুন">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* 🔄 Recurring Section */}

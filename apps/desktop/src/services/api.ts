@@ -11,14 +11,14 @@ import type { Task, User, TodayStats, SubTask, ApiResponse } from '../types';
 // Create axios instance
 export const api: AxiosInstance = axios.create({
     baseURL: API_URL,
-    timeout: 15000, // 15s — prevents long hangs when API is slow/down
+    timeout: 30000, // 30s — remote DB can be slow; 15s caused cascading timeouts
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-// Retry helper with exponential backoff
-async function retryRequest<T>(fn: () => Promise<T>, maxRetries = 3, baseDelay = 2000): Promise<T> {
+// Retry helper with exponential backoff (default 1 retry — timeout already 30s)
+async function retryRequest<T>(fn: () => Promise<T>, maxRetries = 1, baseDelay = 3000): Promise<T> {
     let lastError: any;
     for (let i = 0; i < maxRetries; i++) {
         try {
@@ -388,8 +388,10 @@ export const leaveApi = {
 export const earningsApi = {
     /** Get current earnings (since last pay) */
     getCurrentEarnings: async (): Promise<any> => {
+        console.log('[earningsApi] Fetching /payroll/current-earnings...');
         const { data: res } = await api.get('/payroll/current-earnings');
-        if (!res.success) throw new Error(res.error);
+        console.log('[earningsApi] Response success:', res.success, 'netAmount:', res.earnings?.netAmount);
+        if (!res.success) throw new Error(res.error || 'Earnings API returned error');
         return res.earnings;
     },
 };

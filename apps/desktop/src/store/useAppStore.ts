@@ -132,8 +132,26 @@ interface ActiveTimer {
     activityEnabled: boolean;
 }
 
+// ============================================================
+// Task-Level Tracker (wall-clock time + screenshot dedup)
+// One tracker per TASK — prevents N screenshots for N subtasks
+// ============================================================
+interface TaskTracker {
+    taskId: string;
+    wallClockStartedAt: number;       // When main task play was pressed
+    wallClockAccumulated: number;     // Pre-existing accumulated seconds
+    wallClockElapsed: number;         // Current display value (for UI)
+    isPaused: boolean;
+    screenshotInterval: number;
+    lastScreenshotElapsed: number;    // Last screenshot at this wallClock second
+    screenshotEnabled: boolean;
+    monitoringMode: 'TRANSPARENT' | 'STEALTH';
+    // Track which subtasks were running before pause (for resume)
+    pausedSubTaskIds: string[];
+}
+
 // Export for use in components
-export type { ActiveTimer };
+export type { ActiveTimer, TaskTracker };
 
 // ============================================================
 // Store State Interface
@@ -156,7 +174,9 @@ interface AppState {
 
     // Active Timers (multiple concurrent support)
     activeTimers: Record<string, ActiveTimer>; // subTaskId -> timer
+    taskTrackers: Record<string, TaskTracker>; // taskId -> tracker (wall-clock + screenshots)
     tickCounter: number; // Forces re-render on tick
+    lastTickDate: string; // 'YYYY-MM-DD' — for detecting date change & midnight auto-stop
 
     // Today Stats
     todayStats: TodayStats;
@@ -206,6 +226,13 @@ interface AppState {
     stopTimer: (subTaskId: string) => void;
     stopAllTimers: () => void;
     tick: () => void; // Called every second
+
+    // Actions - Task-Level Controls (wall-clock + screenshot dedup)
+    startTaskTracking: (task: Task) => void;
+    pauseTaskTracking: (taskId: string) => void;
+    resumeTaskTracking: (taskId: string) => void;
+    stopTaskTracking: (taskId: string) => void;
+    getTaskWallClockSeconds: (taskId: string) => number;
 
     // Actions - Stats
     setTodayStats: (stats: TodayStats) => void;
@@ -257,7 +284,9 @@ export const useAppStore = create<AppState>()(
             tasksLoading: false,
             isLoading: false,
             activeTimers: {},
+            taskTrackers: {},
             tickCounter: 0,
+            lastTickDate: new Date().toISOString().slice(0, 10),
             todayStats: {
                 totalSeconds: 0,
                 totalKeystrokes: 0,
@@ -291,6 +320,7 @@ export const useAppStore = create<AppState>()(
                     isAuthenticated: false,
                     tasks: [],
                     activeTimers: {},
+                    taskTrackers: {},
                     selectedTaskId: null,
                     isOffline: false,
                     pendingSyncCount: 0,
@@ -338,26 +368,20 @@ export const useAppStore = create<AppState>()(
                     return;
                 }
 
-                // STEP 3: Try API in background (2 attempts, 2s gap)
-                const maxRetries = 2;
-                for (let attempt = 0; attempt < maxRetries; attempt++) {
-                    try {
-                        const { api } = await import('../services/api');
-                        const response = await api.get('/tasks/list');
-                        if (response.data.success) {
-                            const tasks = response.data.tasks || [];
-                            set({ tasks, isLoading: false, tasksLoading: false });
-                            // Update IndexedDB cache with fresh data
-                            cacheTasks(tasks).catch(() => {});
-                            console.log(`✅ Tasks refreshed from API: ${tasks.length} tasks`);
-                        }
-                        return; // Success
-                    } catch (error: any) {
-                        console.error(`Failed to fetch tasks (attempt ${attempt + 1}/${maxRetries}):`, error?.message);
-                        if (attempt < maxRetries - 1) {
-                            await new Promise(resolve => setTimeout(resolve, 2000));
-                        }
+                // STEP 3: Try API in background (single attempt — timeout already 30s, no need to retry-flood)
+                try {
+                    const { api } = await import('../services/api');
+                    const response = await api.get('/tasks/list');
+                    if (response.data.success) {
+                        const tasks = response.data.tasks || [];
+                        set({ tasks, isLoading: false, tasksLoading: false });
+                        // Update IndexedDB cache with fresh data
+                        cacheTasks(tasks).catch(() => {});
+                        console.log(`✅ Tasks refreshed from API: ${tasks.length} tasks`);
                     }
+                    return; // Success
+                } catch (error: any) {
+                    console.error(`Failed to fetch tasks:`, error?.message);
                 }
 
                 // STEP 4: API failed — cache already shown above. Don't set isOffline here!
@@ -416,10 +440,65 @@ export const useAppStore = create<AppState>()(
                     return;
                 }
 
+                // Guard: prevent starting subtasks for a DIFFERENT task while another task is active
+                const runningOtherTask = Object.values(get().taskTrackers).find(
+                    t => t.taskId !== task.id && !t.isPaused
+                );
+                if (runningOtherTask) {
+                    get().addToast('error', '\u0985\u09A8\u09CD\u09AF \u098F\u0995\u099F\u09BF \u099F\u09BE\u09B8\u09CD\u0995 \u0987\u09A4\u09BF\u09AE\u09A7\u09CD\u09AF\u09C7 \u099A\u09B2\u099B\u09C7\u0964 \u0986\u0997\u09C7 \u09B8\u09C7\u099F\u09BF \u09AC\u09A8\u09CD\u09A7 \u0995\u09B0\u09C1\u09A8\u0964');
+                    return;
+                }
+
                 // Check if already running
                 if (activeTimers[subTask.id] && !activeTimers[subTask.id].isPaused) {
                     console.log(`Timer already running for ${subTask.id}`);
                     return;
+                }
+
+                // Auto-ensure TaskTracker exists for this task (screenshots require it)
+                // This is the single-point fix: no matter who calls startTimer(),
+                // the TaskTracker will exist for tick() to fire screenshots.
+                if (!get().taskTrackers[task.id]) {
+                    const ssInterval = task.screenshotInterval || get().settings.screenshotInterval || 10;
+                    let initialWallClock = 0;
+                    if (task.subTasks && task.subTasks.length > 0) {
+                        initialWallClock = Math.max(...task.subTasks.map(st => {
+                            const t = get().activeTimers[st.id];
+                            return t ? t.elapsedSeconds : (st.trackedTime || 0);
+                        }), 0);
+                    }
+                    set((state) => ({
+                        taskTrackers: {
+                            ...state.taskTrackers,
+                            [task.id]: {
+                                taskId: task.id,
+                                wallClockStartedAt: Date.now(),
+                                wallClockAccumulated: initialWallClock,
+                                wallClockElapsed: initialWallClock,
+                                isPaused: false,
+                                screenshotInterval: ssInterval,
+                                lastScreenshotElapsed: initialWallClock,
+                                screenshotEnabled: task.screenshotEnabled !== false,
+                                monitoringMode: task.monitoringMode || 'TRANSPARENT',
+                                pausedSubTaskIds: [],
+                            },
+                        },
+                    }));
+                } else {
+                    // If tracker exists but is paused (last subtask stopped), resume it
+                    const existingTracker = get().taskTrackers[task.id];
+                    if (existingTracker && existingTracker.isPaused) {
+                        set((state) => ({
+                            taskTrackers: {
+                                ...state.taskTrackers,
+                                [task.id]: {
+                                    ...existingTracker,
+                                    isPaused: false,
+                                    wallClockStartedAt: Date.now(),
+                                },
+                            },
+                        }));
+                    }
                 }
 
                 const initialSeconds = subTask.totalSeconds || subTask.trackedTime || 0;
@@ -484,6 +563,13 @@ export const useAppStore = create<AppState>()(
                 }));
 
                 get().updateSubTaskTime(subTaskId, totalSeconds);
+
+                // Sync subtask time to backend (fire-and-forget)
+                import('../services/api').then(({ subTaskApi }) => {
+                    subTaskApi.updateTime(subTaskId, totalSeconds).catch(err =>
+                        console.error('[SYNC] Failed to sync subtask time on pause:', err)
+                    );
+                }).catch(() => {});
             },
 
             resumeTimer: (subTaskId) => {
@@ -516,15 +602,43 @@ export const useAppStore = create<AppState>()(
                 // Update subtask time
                 get().updateSubTaskTime(subTaskId, totalSeconds);
 
+                // Sync subtask time to backend (fire-and-forget)
+                import('../services/api').then(({ subTaskApi }) => {
+                    subTaskApi.updateTime(subTaskId, totalSeconds).catch(err =>
+                        console.error('[SYNC] Failed to sync subtask time on stop:', err)
+                    );
+                }).catch(() => {});
+
                 // Remove from active timers
+                const taskId = timer.taskId;
                 set((state) => {
                     const newTimers = { ...state.activeTimers };
                     delete newTimers[subTaskId];
                     return { activeTimers: newTimers };
                 });
 
-                // Notify Electron if no more active timers
-                if (Object.keys(get().activeTimers).length === 0) {
+                // When last subtask for a task stops, PAUSE (don't delete) the TaskTracker
+                // This preserves wall-clock data for progress bar + allows auto-resume on next startTimer()
+                const remainingForTask = Object.values(get().activeTimers).filter(t => t.taskId === taskId);
+                if (remainingForTask.length === 0) {
+                    const tracker = get().taskTrackers[taskId];
+                    if (tracker && !tracker.isPaused) {
+                        const elapsed = Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000);
+                        const totalWall = tracker.wallClockAccumulated + elapsed;
+                        set((state) => ({
+                            taskTrackers: {
+                                ...state.taskTrackers,
+                                [taskId]: {
+                                    ...tracker,
+                                    isPaused: true,
+                                    wallClockAccumulated: totalWall,
+                                    wallClockElapsed: totalWall,
+                                    wallClockStartedAt: Date.now(),
+                                    pausedSubTaskIds: [],
+                                },
+                            },
+                        }));
+                    }
                     window.electron?.trackingStopped?.();
                 }
             },
@@ -534,33 +648,206 @@ export const useAppStore = create<AppState>()(
                 Object.keys(activeTimers).forEach((subTaskId) => {
                     get().stopTimer(subTaskId);
                 });
+                // Also clear all task trackers
+                set({ taskTrackers: {} });
                 window.electron?.trackingStopped?.();
+            },
+
+            // ============================================================
+            // Task-Level Controls — Wall-Clock Time + Screenshot Dedup
+            // ============================================================
+            startTaskTracking: (task) => {
+                const { taskTrackers, activeTimers } = get();
+
+                // Check if task is deactivated by admin
+                if (task.isActive === false) {
+                    get().addToast('error', '\u098F\u0987 \u099F\u09BE\u09B8\u09CD\u0995 \u098F\u09A1\u09AE\u09BF\u09A8 \u09A6\u09CD\u09AC\u09BE\u09B0\u09BE \u09AC\u09A8\u09CD\u09A7 \u0995\u09B0\u09BE \u09B9\u09AF\u09BC\u09C7\u099B\u09C7');
+                    return;
+                }
+
+                // Guard: prevent multiple DIFFERENT tasks from running simultaneously
+                const runningOtherTask = Object.values(taskTrackers).find(
+                    t => t.taskId !== task.id && !t.isPaused
+                );
+                if (runningOtherTask) {
+                    get().addToast('error', '\u0985\u09A8\u09CD\u09AF \u098F\u0995\u099F\u09BF \u099F\u09BE\u09B8\u09CD\u0995 \u0987\u09A4\u09BF\u09AE\u09A7\u09CD\u09AF\u09C7 \u099A\u09B2\u099B\u09C7\u0964 \u0986\u0997\u09C7 \u09B8\u09C7\u099F\u09BF \u09AC\u09A8\u09CD\u09A7 \u0995\u09B0\u09C1\u09A8\u0964');
+                    return;
+                }
+
+                // Already tracking? Just resume if paused
+                if (taskTrackers[task.id]) {
+                    if (taskTrackers[task.id].isPaused) {
+                        get().resumeTaskTracking(task.id);
+                    }
+                    return;
+                }
+
+                // Calculate initial wall-clock from max subtask tracked time
+                // (since concurrent subtasks share wall-clock, max is more accurate than sum)
+                let initialWallClock = 0;
+                if (task.subTasks && task.subTasks.length > 0) {
+                    initialWallClock = Math.max(...task.subTasks.map(st => {
+                        const timer = activeTimers[st.id];
+                        return timer ? timer.elapsedSeconds : (st.trackedTime || 0);
+                    }), 0);
+                }
+
+                const screenshotInterval = task.screenshotInterval || get().settings.screenshotInterval || 10;
+
+                const tracker: TaskTracker = {
+                    taskId: task.id,
+                    wallClockStartedAt: Date.now(),
+                    wallClockAccumulated: initialWallClock,
+                    wallClockElapsed: initialWallClock,
+                    isPaused: false,
+                    screenshotInterval,
+                    lastScreenshotElapsed: initialWallClock,
+                    screenshotEnabled: task.screenshotEnabled !== false,
+                    monitoringMode: task.monitoringMode || 'TRANSPARENT',
+                    pausedSubTaskIds: [],
+                };
+
+                set((state) => ({
+                    taskTrackers: {
+                        ...state.taskTrackers,
+                        [task.id]: tracker,
+                    },
+                }));
+
+                // Auto-start first pending subtask if none are running
+                const runningForTask = Object.values(activeTimers).filter(t => t.taskId === task.id);
+                if (runningForTask.length === 0 && task.subTasks && task.subTasks.length > 0) {
+                    const firstPending = task.subTasks.find(st => st.status !== 'COMPLETED');
+                    if (firstPending) {
+                        get().startTimer(firstPending, task);
+                    }
+                }
+
+                // Notify Electron
+                window.electron?.trackingStarted?.({
+                    taskId: task.id,
+                    subTaskId: '',
+                    taskName: task.title,
+                    monitoringMode: task.monitoringMode || 'TRANSPARENT',
+                });
+            },
+
+            pauseTaskTracking: (taskId) => {
+                const tracker = get().taskTrackers[taskId];
+                if (!tracker || tracker.isPaused) return;
+
+                // Calculate accumulated wall-clock
+                const elapsed = Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000);
+                const totalWall = tracker.wallClockAccumulated + elapsed;
+
+                // Remember which subtasks were running (to resume them later)
+                const runningSubTaskIds = Object.values(get().activeTimers)
+                    .filter(t => t.taskId === taskId && !t.isPaused)
+                    .map(t => t.subTaskId);
+
+                // Pause all subtask timers for this task
+                runningSubTaskIds.forEach(subId => {
+                    get().pauseTimer(subId);
+                });
+
+                set((state) => ({
+                    taskTrackers: {
+                        ...state.taskTrackers,
+                        [taskId]: {
+                            ...tracker,
+                            isPaused: true,
+                            wallClockAccumulated: totalWall,
+                            wallClockElapsed: totalWall,
+                            wallClockStartedAt: Date.now(),
+                            pausedSubTaskIds: runningSubTaskIds,
+                        },
+                    },
+                }));
+            },
+
+            resumeTaskTracking: (taskId) => {
+                const tracker = get().taskTrackers[taskId];
+                if (!tracker || !tracker.isPaused) return;
+
+                // Resume the tracker
+                set((state) => ({
+                    taskTrackers: {
+                        ...state.taskTrackers,
+                        [taskId]: {
+                            ...tracker,
+                            isPaused: false,
+                            wallClockStartedAt: Date.now(),
+                            pausedSubTaskIds: [],
+                        },
+                    },
+                }));
+
+                // Resume previously-running subtask timers
+                tracker.pausedSubTaskIds.forEach(subId => {
+                    get().resumeTimer(subId);
+                });
+            },
+
+            stopTaskTracking: (taskId) => {
+                const tracker = get().taskTrackers[taskId];
+                if (!tracker) return;
+
+                // Stop ALL subtask timers for this task
+                const timersForTask = Object.values(get().activeTimers).filter(t => t.taskId === taskId);
+                timersForTask.forEach(t => {
+                    get().stopTimer(t.subTaskId);
+                });
+
+                // Remove tracker (may already be removed by auto-stop in stopTimer)
+                set((state) => {
+                    const newTrackers = { ...state.taskTrackers };
+                    delete newTrackers[taskId];
+                    return { taskTrackers: newTrackers };
+                });
+
+                if (Object.keys(get().activeTimers).length === 0) {
+                    window.electron?.trackingStopped?.();
+                }
+            },
+
+            getTaskWallClockSeconds: (taskId) => {
+                const tracker = get().taskTrackers[taskId];
+                if (!tracker) return 0;
+
+                let total = tracker.wallClockAccumulated;
+                if (!tracker.isPaused) {
+                    total += Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000);
+                }
+                return total;
             },
 
             tick: () => {
                 // Called every second — MUST be lightweight to avoid memory bloat
-                const { activeTimers, settings } = get();
+                const { activeTimers, taskTrackers, settings } = get();
                 const timerKeys = Object.keys(activeTimers);
+                const trackerKeys = Object.keys(taskTrackers);
 
-                // Fast path: no active timers — skip everything
-                if (timerKeys.length === 0) {
+                // Midnight detection — if the date has changed, auto-stop all timers for new day
+                const today = new Date().toISOString().slice(0, 10);
+                if (get().lastTickDate !== today) {
+                    console.log('[TICK] Date changed — auto-stopping all timers for new day');
+                    set({ lastTickDate: today });
+                    get().stopAllTimers();
+                    return;
+                }
+
+                // Fast path: no active timers AND no task trackers — skip everything
+                if (timerKeys.length === 0 && trackerKeys.length === 0) {
                     set((state) => ({ tickCounter: state.tickCounter + 1 }));
                     return;
                 }
 
                 const now = Date.now();
                 let hasChanges = false;
-                const timersToScreenshot: ActiveTimer[] = [];
 
-                // MUTATE in-place instead of creating new objects every second
-                // This is safe because Zustand only triggers re-renders on set()
+                // ── Update subtask timers (elapsed only, NO screenshot check) ──
                 for (const id of timerKeys) {
                     const timer = activeTimers[id];
-
-                    // Migration guard
-                    if (typeof timer.lastScreenshotElapsed === 'undefined') {
-                        timer.lastScreenshotElapsed = timer.elapsedSeconds;
-                    }
 
                     if (!timer.isPaused) {
                         const newElapsed = timer.accumulatedSeconds + Math.floor((now - timer.startedAt) / 1000);
@@ -568,14 +855,39 @@ export const useAppStore = create<AppState>()(
                             timer.elapsedSeconds = newElapsed;
                             hasChanges = true;
                         }
+                    }
+                }
 
-                        // Screenshot check
-                        if (timer.screenshotEnabled !== false) {
-                            const intervalSeconds = (timer.screenshotInterval || settings.screenshotInterval || 10) * 60;
-                            if (newElapsed - timer.lastScreenshotElapsed >= intervalSeconds) {
-                                timer.lastScreenshotElapsed = newElapsed;
-                                timersToScreenshot.push(timer);
+                // ── Update task trackers (wall-clock + ONE screenshot per TASK) ──
+                const tasksToScreenshot: { tracker: TaskTracker; activeTimersList: ActiveTimer[] }[] = [];
+
+                for (const taskId of trackerKeys) {
+                    const tracker = taskTrackers[taskId];
+                    if (!tracker.isPaused) {
+                        const newWall = tracker.wallClockAccumulated + Math.floor((now - tracker.wallClockStartedAt) / 1000);
+                        if (newWall !== tracker.wallClockElapsed) {
+                            tracker.wallClockElapsed = newWall;
+                            hasChanges = true;
+                        }
+
+                        // ONE screenshot check per TASK (not per subtask!)
+                        if (tracker.screenshotEnabled) {
+                            const intervalSeconds = (tracker.screenshotInterval || settings.screenshotInterval || 10) * 60;
+                            const timeSinceLastShot = newWall - tracker.lastScreenshotElapsed;
+                            // Debug log every 30 seconds to help diagnose screenshot issues
+                            if (newWall % 30 === 0) {
+                                console.log(`[TICK] Screenshot check: task=${taskId.slice(0,8)}, wall=${newWall}s, lastShot=${tracker.lastScreenshotElapsed}s, interval=${intervalSeconds}s, remaining=${intervalSeconds - timeSinceLastShot}s`);
                             }
+                            if (timeSinceLastShot >= intervalSeconds) {
+                                console.log(`[TICK] 📸 Screenshot TRIGGERED for task=${taskId.slice(0,8)} at wall=${newWall}s`);
+                                tracker.lastScreenshotElapsed = newWall;
+                                const activeForTask = Object.values(activeTimers).filter(t => t.taskId === taskId && !t.isPaused);
+                                if (activeForTask.length > 0) {
+                                    tasksToScreenshot.push({ tracker, activeTimersList: activeForTask });
+                                }
+                            }
+                        } else if (newWall % 60 === 0) {
+                            console.log(`[TICK] Screenshots DISABLED for task=${taskId.slice(0,8)}`);
                         }
                     }
                 }
@@ -585,7 +897,7 @@ export const useAppStore = create<AppState>()(
                 set((state) => ({
                     tickCounter: (state.tickCounter + 1) % 1_000_000,
                     // Spread ONLY when there are changes — avoids new object allocation on idle ticks
-                    ...(hasChanges ? { activeTimers: { ...activeTimers } } : {}),
+                    ...(hasChanges ? { activeTimers: { ...activeTimers }, taskTrackers: { ...taskTrackers } } : {}),
                 }));
 
                 // Notify Electron with total time
@@ -683,11 +995,11 @@ export const useAppStore = create<AppState>()(
                 // + Circuit breaker: skip uploads after repeated failures
                 // + API health check: skip when API is unresponsive
                 // ============================================================
-                if (timersToScreenshot.length > 0 && screenshotInProgress) {
+                if (tasksToScreenshot.length > 0 && screenshotInProgress) {
                     console.warn('Screenshot still in progress, skipping this interval');
                     return; // Early return — don't pile up
                 }
-                if (timersToScreenshot.length === 0) return;
+                if (tasksToScreenshot.length === 0) return;
 
                 // Determine if we should queue screenshots locally instead of uploading
                 // (API unhealthy or circuit breaker cooldown — but STILL capture screenshots!)
@@ -705,10 +1017,10 @@ export const useAppStore = create<AppState>()(
 
                 screenshotInProgress = true;
 
-                // Process ONE screenshot at a time (sequential, not parallel)
+                // Process ONE screenshot per TASK (sequential, not parallel)
                 (async () => {
                     try {
-                        for (const timer of timersToScreenshot) {
+                        for (const { tracker: taskTracker, activeTimersList } of tasksToScreenshot) {
                             if (!window.electron) break;
 
                             let rawBase64: string | null = null;
@@ -728,13 +1040,18 @@ export const useAppStore = create<AppState>()(
                             const blob = new Blob([bytes], { type: 'image/jpeg' });
                             const capturedAt = new Date().toISOString();
 
+                            // Build multi-subtask metadata
+                            const primaryTimer = activeTimersList[0];
+                            const allActiveSubTaskIds = activeTimersList.map(t => t.subTaskId).join(',');
+                            const allActiveSubTaskNames = activeTimersList.map(t => t.subTaskTitle).join(', ');
+
                             // Get activity stats
                             const activityStats = await window.electron.getActivityStats?.() || { keystrokes: 0, mouseClicks: 0 };
 
                             // Inactivity warning
-                            if (activityStats.keystrokes === 0 && activityStats.mouseClicks === 0 && timer.monitoringMode === 'TRANSPARENT') {
-                                const intervalMins = timer.screenshotInterval || settings.screenshotInterval || 10;
-                                get().addToast('warning', `সতর্কতা: গত ${intervalMins} মিনিটে কোনো কার্যকলাপ পাওয়া যায়নি।`, 8000);
+                            if (activityStats.keystrokes === 0 && activityStats.mouseClicks === 0 && taskTracker.monitoringMode === 'TRANSPARENT') {
+                                const intervalMins = taskTracker.screenshotInterval || settings.screenshotInterval || 10;
+                                get().addToast('warning', `\u09B8\u09A4\u09B0\u09CD\u0995\u09A4\u09BE: \u0997\u09A4 ${intervalMins} \u09AE\u09BF\u09A8\u09BF\u099F\u09C7 \u0995\u09CB\u09A8\u09CB \u0995\u09BE\u09B0\u09CD\u09AF\u0995\u09B2\u09BE\u09AA \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF\u0964`, 8000);
                             }
 
                             // Offline queue (also used when API unhealthy/cooldown — always capture!)
@@ -742,8 +1059,10 @@ export const useAppStore = create<AppState>()(
                                 const { enqueueScreenshot } = await import('../utils/offlineQueue');
                                 const offlineDeviceId = await window.electron.getDeviceId?.().catch(() => undefined);
                                 await enqueueScreenshot({
-                                    taskId: timer.taskId,
-                                    subTaskId: timer.subTaskId,
+                                    taskId: taskTracker.taskId,
+                                    subTaskId: primaryTimer.subTaskId,
+                                    activeSubTaskIds: allActiveSubTaskIds,
+                                    activeSubTaskNames: allActiveSubTaskNames,
                                     deviceId: offlineDeviceId,
                                     keystrokes: activityStats.keystrokes || 0,
                                     mouseClicks: activityStats.mouseClicks || 0,
@@ -752,7 +1071,7 @@ export const useAppStore = create<AppState>()(
                                     imageBlob: blob,
                                 });
                                 // Add to local history cache (offline — pending sync)
-                                const intervalSecsOffline = (timer.screenshotInterval || settings.screenshotInterval || 10) * 60;
+                                const intervalSecsOffline = (taskTracker.screenshotInterval || settings.screenshotInterval || 10) * 60;
                                 addLocalHistoryEntry(capturedAt.split('T')[0], {
                                     id: `local-${Date.now()}`,
                                     recordedAt: capturedAt,
@@ -760,12 +1079,12 @@ export const useAppStore = create<AppState>()(
                                     keyboardCount: activityStats.keystrokes || 0,
                                     mouseCount: activityStats.mouseClicks || 0,
                                     duration: intervalSecsOffline,
-                                    taskId: timer.taskId,
+                                    taskId: taskTracker.taskId,
                                     synced: false,
                                 }).catch(() => {});
                                 await window.electron.resetActivityStats?.();
-                                if (timer.monitoringMode === 'TRANSPARENT') {
-                                    get().addToast('info', shouldQueueOffline ? 'স্ক্রিনশট লোকালি সেভ হয়েছে — API পুনরুদ্ধার হলে আপলোড হবে' : 'Offline - screenshot saved locally');
+                                if (taskTracker.monitoringMode === 'TRANSPARENT') {
+                                    get().addToast('info', shouldQueueOffline ? '\u09B8\u09CD\u0995\u09CD\u09B0\u09BF\u09A8\u09B6\u099F \u09B2\u09CB\u0995\u09BE\u09B2\u09BF \u09B8\u09C7\u09AD \u09B9\u09AF\u09BC\u09C7\u099B\u09C7 \u2014 API \u09AA\u09C1\u09A8\u09B0\u09C1\u09A6\u09CD\u09A7\u09BE\u09B0 \u09B9\u09B2\u09C7 \u0986\u09AA\u09B2\u09CB\u09A1 \u09B9\u09AC\u09C7' : 'Offline - screenshot saved locally');
                                 }
                                 continue;
                             }
@@ -774,8 +1093,10 @@ export const useAppStore = create<AppState>()(
                             try {
                                 const formData = new FormData();
                                 formData.append('screenshot', new File([blob], `ss-${Date.now()}.jpg`, { type: 'image/jpeg' }));
-                                formData.append('taskId', timer.taskId);
-                                formData.append('subTaskId', timer.subTaskId);
+                                formData.append('taskId', taskTracker.taskId);
+                                formData.append('subTaskId', primaryTimer.subTaskId);
+                                formData.append('activeSubTaskIds', allActiveSubTaskIds);
+                                formData.append('activeSubTaskNames', allActiveSubTaskNames);
                                 formData.append('keystrokes', String(activityStats.keystrokes || 0));
                                 formData.append('mouseClicks', String(activityStats.mouseClicks || 0));
                                 formData.append('capturedAt', capturedAt);
@@ -795,7 +1116,7 @@ export const useAppStore = create<AppState>()(
                                 window.dispatchEvent(new CustomEvent('earnings-update'));
 
                                 // Add to local history cache (online — synced)
-                                const intervalSecsOnline = (timer.screenshotInterval || settings.screenshotInterval || 10) * 60;
+                                const intervalSecsOnline = (taskTracker.screenshotInterval || settings.screenshotInterval || 10) * 60;
                                 addLocalHistoryEntry(capturedAt.split('T')[0], {
                                     id: `local-${Date.now()}`,
                                     recordedAt: capturedAt,
@@ -803,7 +1124,7 @@ export const useAppStore = create<AppState>()(
                                     keyboardCount: activityStats.keystrokes || 0,
                                     mouseCount: activityStats.mouseClicks || 0,
                                     duration: intervalSecsOnline,
-                                    taskId: timer.taskId,
+                                    taskId: taskTracker.taskId,
                                     synced: true,
                                 }).catch(() => {});
 
@@ -813,7 +1134,7 @@ export const useAppStore = create<AppState>()(
                                     if (appUsageEntries && appUsageEntries.length > 0) {
                                         await api.post('/app-usage/log', {
                                             entries: appUsageEntries.map((e: any) => ({
-                                                taskId: timer.taskId,
+                                                taskId: taskTracker.taskId,
                                                 appName: e.appName,
                                                 windowTitle: e.windowTitle,
                                                 durationSec: e.durationSec,
@@ -823,12 +1144,12 @@ export const useAppStore = create<AppState>()(
                                     }
                                 } catch { /* non-critical */ }
 
-                                if (timer.monitoringMode === 'TRANSPARENT') {
-                                    get().addToast('success', 'স্ক্রিনশট আপলোড হয়েছে');
+                                if (taskTracker.monitoringMode === 'TRANSPARENT') {
+                                    get().addToast('success', '\u09B8\u09CD\u0995\u09CD\u09B0\u09BF\u09A8\u09B6\u099F \u0986\u09AA\u09B2\u09CB\u09A1 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7');
                                 }
                             } catch (err: any) {
                                 if (err?.response?.data?.quotaExceeded) {
-                                    get().addToast('warning', 'স্টোরেজ সীমা ছাড়িয়ে গেছে।');
+                                    get().addToast('warning', '\u09B8\u09CD\u099F\u09CB\u09B0\u09C7\u099C \u09B8\u09C0\u09AE\u09BE \u099B\u09BE\u09A1\u09BF\u09AF\u09BC\u09C7 \u0997\u09C7\u099B\u09C7\u0964');
                                     break; // Stop all screenshots
                                 }
 
@@ -844,8 +1165,10 @@ export const useAppStore = create<AppState>()(
                                     const { enqueueScreenshot } = await import('../utils/offlineQueue');
                                     const failedDeviceId = await window.electron.getDeviceId?.().catch(() => undefined);
                                     await enqueueScreenshot({
-                                        taskId: timer.taskId,
-                                        subTaskId: timer.subTaskId,
+                                        taskId: taskTracker.taskId,
+                                        subTaskId: primaryTimer.subTaskId,
+                                        activeSubTaskIds: allActiveSubTaskIds,
+                                        activeSubTaskNames: allActiveSubTaskNames,
                                         deviceId: failedDeviceId,
                                         keystrokes: activityStats.keystrokes || 0,
                                         mouseClicks: activityStats.mouseClicks || 0,
@@ -853,7 +1176,7 @@ export const useAppStore = create<AppState>()(
                                         capturedAt,
                                         imageBlob: blob,
                                     });
-                                    const intervalSecsFailed = (timer.screenshotInterval || settings.screenshotInterval || 10) * 60;
+                                    const intervalSecsFailed = (taskTracker.screenshotInterval || settings.screenshotInterval || 10) * 60;
                                     addLocalHistoryEntry(capturedAt.split('T')[0], {
                                         id: `local-${Date.now()}`,
                                         recordedAt: capturedAt,
@@ -861,7 +1184,7 @@ export const useAppStore = create<AppState>()(
                                         keyboardCount: activityStats.keystrokes || 0,
                                         mouseCount: activityStats.mouseClicks || 0,
                                         duration: intervalSecsFailed,
-                                        taskId: timer.taskId,
+                                        taskId: taskTracker.taskId,
                                         synced: false,
                                     }).catch(() => {});
                                     console.log('📋 Failed upload saved to offline queue — will retry when API recovers');
@@ -959,16 +1282,29 @@ export const useAppStore = create<AppState>()(
             getAllActiveTimers: () => Object.values(get().activeTimers),
 
             getTotalActiveSeconds: () => {
-                const { activeTimers } = get();
-                let total = 0;
+                const { taskTrackers, activeTimers } = get();
 
+                // Prefer wall-clock from task trackers (accurate for concurrent subtasks)
+                const trackerValues = Object.values(taskTrackers);
+                if (trackerValues.length > 0) {
+                    let total = 0;
+                    trackerValues.forEach((tracker) => {
+                        total += tracker.wallClockAccumulated;
+                        if (!tracker.isPaused) {
+                            total += Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000);
+                        }
+                    });
+                    return total;
+                }
+
+                // Fallback: sum subtask timers (backward compat if no task tracker)
+                let total = 0;
                 Object.values(activeTimers).forEach((timer) => {
                     total += timer.accumulatedSeconds;
                     if (!timer.isPaused) {
                         total += Math.floor((Date.now() - timer.startedAt) / 1000);
                     }
                 });
-
                 return total;
             },
 
@@ -1025,6 +1361,7 @@ export const useAppStore = create<AppState>()(
 export const selectUser = (state: AppState) => state.user;
 export const selectTasks = (state: AppState) => state.tasks;
 export const selectActiveTimers = (state: AppState) => state.activeTimers;
+export const selectTaskTrackers = (state: AppState) => state.taskTrackers;
 export const selectToasts = (state: AppState) => state.toasts;
 export const selectSettings = (state: AppState) => state.settings;
 export const selectSelectedTaskId = (state: AppState) => state.selectedTaskId;

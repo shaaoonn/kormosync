@@ -1,9 +1,16 @@
+// ============================================================
+// KormoSync Desktop App - Task Details Page (Phase 12 Redesign)
+// styled-components + theme tokens — consistent with Dashboard
+// ============================================================
+
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import styled, { css, keyframes } from 'styled-components';
 import { auth } from '../firebase';
 import axios from 'axios';
 import ProofOfWorkModal from '../components/ProofOfWorkModal';
 import { noteApi } from '../services/api';
+import { theme } from '../styles/theme';
 import type { TaskNote } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
@@ -51,7 +58,6 @@ interface Task {
     recurringType?: string;
     checklist?: TaskChecklist[];
     status?: string;
-    // Phase 10
     employeeCanComplete?: boolean;
     breakReminderEnabled?: boolean;
     breakAfterHours?: number;
@@ -96,6 +102,547 @@ const getFileName = (url: string): string => {
     return decodeURIComponent(parts[parts.length - 1] || 'file');
 };
 
+// ==========================================
+// Animations
+// ==========================================
+const pulse = keyframes`
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+`;
+
+const fadeIn = keyframes`
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+`;
+
+const spin = keyframes`
+    to { transform: rotate(360deg); }
+`;
+
+// ==========================================
+// Styled Components
+// ==========================================
+const PageWrapper = styled.div`
+    height: 100vh;
+    background: ${theme.colors.bg.primary};
+    color: ${theme.colors.text.primary};
+    display: flex;
+    flex-direction: column;
+    font-family: ${theme.typography.fontFamily};
+`;
+
+const HeaderSection = styled.header`
+    padding: ${theme.spacing.xl};
+    border-bottom: 1px solid ${theme.colors.border.primary};
+    flex-shrink: 0;
+    background: ${theme.colors.bg.secondary};
+`;
+
+const BackButton = styled.button`
+    color: ${theme.colors.text.muted};
+    font-size: ${theme.typography.fontSize.sm};
+    background: none;
+    border: none;
+    cursor: pointer;
+    margin-bottom: ${theme.spacing.sm};
+    transition: color ${theme.animation.duration.fast};
+    &:hover { color: ${theme.colors.text.primary}; }
+`;
+
+const HeaderRow = styled.div`
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+`;
+
+const TaskTitle = styled.h1`
+    font-size: ${theme.typography.fontSize.xl};
+    font-weight: ${theme.typography.fontWeight.bold};
+    margin: 0;
+`;
+
+const BadgeRow = styled.div`
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: ${theme.spacing.sm};
+`;
+
+const TagBadge = styled.span<{ $color: string; $bg: string; $border: string }>`
+    font-size: ${theme.typography.fontSize.xs};
+    padding: 2px 8px;
+    border-radius: ${theme.borderRadius.full};
+    background: ${p => p.$bg};
+    color: ${p => p.$color};
+    border: 1px solid ${p => p.$border};
+`;
+
+const TimerBlock = styled.div`
+    text-align: right;
+`;
+
+const TimerLabel = styled.p`
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${theme.colors.text.muted};
+    margin: 0 0 4px 0;
+`;
+
+const TimerValue = styled.p`
+    font-size: ${theme.typography.fontSize['3xl']};
+    font-family: ${theme.typography.fontFamilyMono};
+    font-weight: ${theme.typography.fontWeight.bold};
+    color: ${theme.colors.primary.main};
+    margin: 0;
+`;
+
+const CompleteTaskBtn = styled.button`
+    margin-top: ${theme.spacing.lg};
+    padding: 12px ${theme.spacing.xl};
+    background: ${theme.colors.status.error};
+    border: none;
+    border-radius: ${theme.borderRadius.lg};
+    font-weight: ${theme.typography.fontWeight.bold};
+    width: 100%;
+    font-size: ${theme.typography.fontSize.md};
+    cursor: pointer;
+    color: white;
+    transition: background ${theme.animation.duration.fast};
+    &:hover { background: #dc2626; }
+`;
+
+const AdminOnlyNote = styled.div`
+    margin-top: ${theme.spacing.lg};
+    padding: 12px ${theme.spacing.xl};
+    background: ${theme.colors.bg.tertiary};
+    border-radius: ${theme.borderRadius.lg};
+    text-align: center;
+    color: ${theme.colors.text.muted};
+    font-size: ${theme.typography.fontSize.sm};
+`;
+
+const ScrollContent = styled.main`
+    flex: 1;
+    overflow-y: auto;
+    padding: ${theme.spacing.xl};
+    display: flex;
+    flex-direction: column;
+    gap: ${theme.spacing.lg};
+`;
+
+const SectionCard = styled.div<{ $accent?: string }>`
+    padding: ${theme.spacing.lg};
+    background: ${theme.colors.bg.secondary};
+    border-radius: ${theme.borderRadius.xl};
+    border: 1px solid ${theme.colors.border.primary};
+    animation: ${fadeIn} 0.3s ease;
+    ${p => p.$accent && css`border-left: 3px solid ${p.$accent};`}
+`;
+
+const SectionTitle = styled.h3`
+    font-size: ${theme.typography.fontSize.sm};
+    font-weight: ${theme.typography.fontWeight.semibold};
+    color: ${theme.colors.text.secondary};
+    margin: 0 0 ${theme.spacing.md} 0;
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+`;
+
+const CountBadge = styled.span`
+    padding: 1px 6px;
+    background: ${theme.colors.bg.tertiary};
+    color: ${theme.colors.text.secondary};
+    border-radius: ${theme.borderRadius.sm};
+    font-size: ${theme.typography.fontSize.xs};
+`;
+
+const DescriptionText = styled.p`
+    font-size: ${theme.typography.fontSize.base};
+    color: ${theme.colors.text.secondary};
+    white-space: pre-wrap;
+    line-height: 1.6;
+    margin: 0;
+`;
+
+const PlaceholderText = styled.p`
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${theme.colors.text.disabled};
+    text-align: center;
+    padding: ${theme.spacing.sm} 0;
+    margin: 0;
+`;
+
+const VideoCard = styled.div`
+    padding: ${theme.spacing.lg};
+    background: ${theme.colors.bg.secondary};
+    border-radius: ${theme.borderRadius.xl};
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    animation: ${fadeIn} 0.3s ease;
+`;
+
+const VideoRow = styled.div`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: ${theme.spacing.md};
+    background: ${theme.colors.bg.tertiary};
+    border-radius: ${theme.borderRadius.lg};
+`;
+
+const VideoIcon = styled.div`
+    width: 48px;
+    height: 48px;
+    border-radius: ${theme.borderRadius.lg};
+    background: rgba(99, 102, 241, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+`;
+
+const VideoInfo = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.md};
+`;
+
+const VideoName = styled.span`
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${theme.colors.text.secondary};
+    display: block;
+`;
+
+const VideoFileName = styled.span`
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+`;
+
+const ActionBtn = styled.button<{ $variant?: 'primary' | 'indigo' | 'danger' | 'success' | 'ghost' }>`
+    padding: 6px 12px;
+    border-radius: ${theme.borderRadius.md};
+    font-size: ${theme.typography.fontSize.xs};
+    font-weight: ${theme.typography.fontWeight.medium};
+    cursor: pointer;
+    transition: all ${theme.animation.duration.fast};
+    border: 1px solid transparent;
+
+    ${p => p.$variant === 'primary' && css`
+        background: rgba(59, 130, 246, 0.15);
+        color: #60a5fa;
+        border-color: rgba(59, 130, 246, 0.3);
+        &:hover { background: rgba(59, 130, 246, 0.25); }
+    `}
+    ${p => p.$variant === 'indigo' && css`
+        background: rgba(99, 102, 241, 0.15);
+        color: #818cf8;
+        border-color: rgba(99, 102, 241, 0.3);
+        &:hover { background: rgba(99, 102, 241, 0.25); }
+    `}
+    ${p => p.$variant === 'ghost' && css`
+        background: rgba(100, 116, 139, 0.1);
+        color: ${theme.colors.text.muted};
+        border-color: rgba(100, 116, 139, 0.3);
+        &:hover { background: rgba(100, 116, 139, 0.2); }
+    `}
+`;
+
+const FileItem = styled.div`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: ${theme.spacing.sm};
+    background: ${theme.colors.bg.tertiary};
+    border-radius: ${theme.borderRadius.lg};
+    transition: background ${theme.animation.duration.fast};
+    &:hover { background: ${theme.colors.bg.hover}; }
+`;
+
+const FileLeft = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+    min-width: 0;
+    flex: 1;
+`;
+
+const FileThumb = styled.img`
+    width: 40px;
+    height: 40px;
+    border-radius: ${theme.borderRadius.sm};
+    object-fit: cover;
+    flex-shrink: 0;
+`;
+
+const FileIconText = styled.span`
+    font-size: 18px;
+`;
+
+const FileName = styled.span`
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${theme.colors.text.secondary};
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+`;
+
+const FileBtnGroup = styled.div`
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+`;
+
+const ResourceLink = styled.button`
+    display: block;
+    font-size: ${theme.typography.fontSize.sm};
+    color: #60a5fa;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    margin-bottom: 4px;
+    text-align: left;
+    &:hover { color: #93bbfc; }
+`;
+
+const ChecklistBar = styled.div`
+    width: 100%;
+    height: 6px;
+    background: ${theme.colors.bg.tertiary};
+    border-radius: ${theme.borderRadius.full};
+    overflow: hidden;
+    margin-bottom: ${theme.spacing.md};
+`;
+
+const ChecklistBarFill = styled.div<{ $pct: number }>`
+    height: 100%;
+    width: ${p => p.$pct}%;
+    background: ${theme.colors.status.success};
+    transition: width 0.4s ease;
+`;
+
+const ChecklistItem = styled.div<{ $done: boolean }>`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${p => p.$done ? theme.colors.text.muted : theme.colors.text.secondary};
+    ${p => p.$done && css`text-decoration: line-through;`}
+`;
+
+// Sub-task styled components
+const SubTaskCard = styled.div<{ $active: boolean; $completed: boolean; $locked: boolean }>`
+    padding: ${theme.spacing.lg};
+    border-radius: ${theme.borderRadius.xl};
+    transition: all ${theme.animation.duration.normal};
+    animation: ${fadeIn} 0.3s ease;
+
+    ${p => p.$active && css`
+        background: ${theme.colors.bg.secondary};
+        border: 2px solid ${theme.colors.primary.main};
+        box-shadow: ${theme.shadows.glow.yellow};
+    `}
+    ${p => p.$completed && !p.$active && css`
+        background: rgba(30, 41, 59, 0.5);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+    `}
+    ${p => p.$locked && !p.$active && !p.$completed && css`
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid ${theme.colors.border.primary};
+        opacity: 0.7;
+    `}
+    ${p => !p.$active && !p.$completed && !p.$locked && css`
+        background: ${theme.colors.bg.secondary};
+        border: 1px solid ${theme.colors.border.primary};
+    `}
+`;
+
+const SubTaskRow = styled.div`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+`;
+
+const SubTaskLeft = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.md};
+    flex: 1;
+    min-width: 0;
+`;
+
+const StatusDot = styled.div<{ $color: string; $pulse?: boolean }>`
+    width: 10px;
+    height: 10px;
+    border-radius: ${theme.borderRadius.full};
+    background: ${p => p.$color};
+    flex-shrink: 0;
+    ${p => p.$pulse && css`animation: ${pulse} 1.5s ease-in-out infinite;`}
+`;
+
+const SubTaskTitle = styled.p<{ $completed: boolean }>`
+    font-weight: ${theme.typography.fontWeight.medium};
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    ${p => p.$completed && css`
+        text-decoration: line-through;
+        color: ${theme.colors.text.muted};
+    `}
+`;
+
+const ScheduleBadge = styled.span<{ $type: string }>`
+    font-size: ${theme.typography.fontSize.xs};
+    padding: 2px 8px;
+    border-radius: ${theme.borderRadius.full};
+    flex-shrink: 0;
+    ${p => p.$type === 'active' && css`background: rgba(34, 197, 94, 0.15); color: #4ade80;`}
+    ${p => p.$type === 'starting_soon' && css`background: rgba(234, 179, 8, 0.15); color: #facc15;`}
+    ${p => p.$type === 'locked' && css`background: rgba(100, 116, 139, 0.2); color: ${theme.colors.text.muted};`}
+    ${p => p.$type === 'ended' && css`background: rgba(239, 68, 68, 0.15); color: #f87171;`}
+`;
+
+const BudgetInfo = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.md};
+    margin-top: 4px;
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+`;
+
+const SubTaskDesc = styled.p`
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+    margin: 6px 0 0;
+    white-space: pre-wrap;
+    line-height: 1.5;
+`;
+
+const SubTaskRight = styled.div`
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.lg};
+    flex-shrink: 0;
+`;
+
+const SubTaskTimer = styled.div<{ $active: boolean }>`
+    font-family: ${theme.typography.fontFamilyMono};
+    font-size: ${theme.typography.fontSize.lg};
+    color: ${p => p.$active ? theme.colors.primary.main : theme.colors.text.muted};
+`;
+
+const CircleBtn = styled.button<{ $color: string }>`
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: ${theme.borderRadius.full};
+    background: ${p => p.$color};
+    border: none;
+    cursor: pointer;
+    color: white;
+    font-size: 14px;
+    transition: all ${theme.animation.duration.fast};
+    &:hover { filter: brightness(1.1); transform: scale(1.05); }
+    &:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+`;
+
+const CompletedTag = styled.span`
+    padding: 4px 12px;
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    font-size: ${theme.typography.fontSize.sm};
+    border-radius: ${theme.borderRadius.full};
+`;
+
+// Notes
+const NoteInput = styled.input`
+    flex: 1;
+    background: ${theme.colors.bg.tertiary};
+    border: 1px solid ${theme.colors.border.primary};
+    border-radius: ${theme.borderRadius.lg};
+    padding: 8px 12px;
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${theme.colors.text.primary};
+    outline: none;
+    &::placeholder { color: ${theme.colors.text.disabled}; }
+    &:focus { border-color: ${theme.colors.primary.main}; }
+`;
+
+const NoteSubmitBtn = styled.button`
+    padding: 8px 16px;
+    background: ${theme.colors.primary.main};
+    border: none;
+    border-radius: ${theme.borderRadius.lg};
+    font-size: ${theme.typography.fontSize.sm};
+    font-weight: ${theme.typography.fontWeight.medium};
+    color: ${theme.colors.text.inverse};
+    cursor: pointer;
+    flex-shrink: 0;
+    &:hover { background: ${theme.colors.primary.light}; }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+`;
+
+const NoteItem = styled.div`
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: ${theme.spacing.sm} ${theme.spacing.md};
+    background: ${theme.colors.bg.tertiary};
+    border-radius: ${theme.borderRadius.lg};
+    border-left: 3px solid ${theme.colors.primary.muted};
+`;
+
+const NoteContent = styled.p`
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${theme.colors.text.secondary};
+    margin: 0;
+`;
+
+const NoteMeta = styled.p`
+    font-size: ${theme.typography.fontSize.xs};
+    color: ${theme.colors.text.muted};
+    margin: 4px 0 0;
+`;
+
+const NoteDeleteBtn = styled.button`
+    color: ${theme.colors.text.disabled};
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: ${theme.typography.fontSize.sm};
+    margin-left: ${theme.spacing.sm};
+    flex-shrink: 0;
+    &:hover { color: ${theme.colors.status.error}; }
+`;
+
+const LoadingWrapper = styled.div`
+    height: 100vh;
+    background: ${theme.colors.bg.primary};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+`;
+
+const Spinner = styled.div`
+    width: 40px;
+    height: 40px;
+    border: 4px solid ${theme.colors.border.primary};
+    border-top-color: ${theme.colors.primary.main};
+    border-radius: 50%;
+    animation: ${spin} 0.8s linear infinite;
+`;
+
+const EmptyState = styled.div`
+    text-align: center;
+    color: ${theme.colors.text.muted};
+    padding: ${theme.spacing['2xl']} 0;
+`;
 
 // ==========================================
 // Main Component
@@ -157,12 +704,11 @@ export default function TaskDetails() {
                     const taskNotes = await noteApi.getByTask(taskId);
                     setNotes(taskNotes);
                 } catch {
-                    console.error('Failed to fetch notes');
+                    // Notes feature optional
                 }
-
-                setLoading(false);
             } catch (error) {
-                console.error('Failed to fetch task:', error);
+                console.error('Failed to fetch task data:', error);
+            } finally {
                 setLoading(false);
             }
         };
@@ -171,70 +717,7 @@ export default function TaskDetails() {
     }, [taskId]);
 
     // ==========================================
-    // Poll for Active Sub-Task
-    // ==========================================
-    useEffect(() => {
-        const pollActiveSubTask = async () => {
-            try {
-                const user = auth.currentUser;
-                if (!user || !taskId) return;
-
-                const token = await user.getIdToken();
-                const res = await axios.get(`${API_URL}/subtasks/active`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-
-                if (res.data.success) {
-                    const serverActiveSubTask = res.data.activeSubTask;
-
-                    if (serverActiveSubTask && serverActiveSubTask.task?.id === taskId) {
-                        if (serverActiveSubTask.id !== activeSubTaskId) {
-                            console.log('Web sync: Sub-task started from web dashboard');
-                            setActiveSubTaskId(serverActiveSubTask.id);
-                            setSubTasks(prev => prev.map(st => ({
-                                ...st,
-                                isActive: st.id === serverActiveSubTask.id,
-                                currentSessionSeconds: st.id === serverActiveSubTask.id
-                                    ? serverActiveSubTask.currentSessionSeconds
-                                    : 0
-                            })));
-
-                            window.electron?.trackingStarted?.({
-                                taskName: task?.title || 'Unknown',
-                                taskId: taskId,
-                                subTaskId: serverActiveSubTask.id,
-                                subTaskName: serverActiveSubTask.title,
-                                endTime: serverActiveSubTask.endTime
-                            });
-                        }
-                    } else if (!serverActiveSubTask && activeSubTaskId) {
-                        const wasActiveInThisTask = subTasks.some(st => st.id === activeSubTaskId);
-                        if (wasActiveInThisTask) {
-                            console.log('Web sync: Sub-task stopped from web dashboard');
-                            setActiveSubTaskId(null);
-                            setSubTasks(prev => prev.map(st => ({
-                                ...st,
-                                isActive: false,
-                                totalSeconds: st.id === activeSubTaskId
-                                    ? st.totalSeconds + st.currentSessionSeconds
-                                    : st.totalSeconds,
-                                currentSessionSeconds: 0
-                            })));
-                            window.electron?.trackingStopped?.();
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Polling error:', error);
-            }
-        };
-
-        const pollInterval = setInterval(pollActiveSubTask, 30000);
-        return () => clearInterval(pollInterval);
-    }, [taskId, activeSubTaskId, subTasks, task]);
-
-    // ==========================================
-    // Timer Tick
+    // Timer Effect — update active sub-task time
     // ==========================================
     useEffect(() => {
         if (activeSubTaskId) {
@@ -247,9 +730,7 @@ export default function TaskDetails() {
                 }));
             }, 1000);
         } else {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
+            if (timerRef.current) clearInterval(timerRef.current);
         }
 
         return () => {
@@ -258,69 +739,15 @@ export default function TaskDetails() {
     }, [activeSubTaskId]);
 
     // ==========================================
-    // Screenshot Interval Logic
+    // Screenshot is handled by the global tick system in useAppStore.ts
+    // No duplicate screenshot logic needed here
     // ==========================================
-    useEffect(() => {
-        let screenshotTimer: ReturnType<typeof setInterval> | null = null;
-
-        const captureAndUpload = async () => {
-            if (!activeSubTaskId || !task) return;
-
-            try {
-                console.log('Capturing screenshot...');
-                const stats = await window.electron.getActivityStats();
-                const base64Image = await window.electron.captureScreenshot();
-
-                const byteCharacters = atob(base64Image);
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }
-                const byteArray = new Uint8Array(byteNumbers);
-                const blob = new Blob([byteArray], { type: 'image/png' });
-
-                const formData = new FormData();
-                formData.append('image', blob, 'screenshot.png');
-                formData.append('taskId', taskId!);
-                formData.append('keystrokes', stats.keystrokes.toString());
-                formData.append('mouseClicks', stats.mouseClicks.toString());
-                formData.append('activeSeconds', (task.screenshotInterval ? task.screenshotInterval * 60 : 300).toString());
-
-                const user = auth.currentUser;
-                if (!user) return;
-                const token = await user.getIdToken();
-
-                await axios.post(`${API_URL}/upload/screenshot`, formData, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'multipart/form-data'
-                    }
-                });
-
-                console.log('Screenshot uploaded successfully');
-                await window.electron.resetActivityStats();
-            } catch (error) {
-                console.error('Failed to upload screenshot:', error);
-            }
-        };
-
-        if (activeSubTaskId && task) {
-            const intervalMinutes = task.screenshotInterval || 10;
-            console.log(`Screenshot timer set for ${intervalMinutes} minutes`);
-            screenshotTimer = setInterval(captureAndUpload, intervalMinutes * 60 * 1000);
-        }
-
-        return () => {
-            if (screenshotTimer) clearInterval(screenshotTimer);
-        };
-    }, [activeSubTaskId, task, taskId]);
 
     // ==========================================
     // Listen for Schedule Auto-Stop
     // ==========================================
     useEffect(() => {
         const handleAutoStop = (data: { taskName: string; reason: string }) => {
-            console.log('Schedule auto-stop received:', data);
             if (activeSubTaskId) {
                 const activeSubTask = subTasks.find(st => st.id === activeSubTaskId);
                 if (activeSubTask) {
@@ -522,24 +949,18 @@ export default function TaskDetails() {
     const handleDownload = async (url: string) => {
         const fullUrl = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}/${url}`;
 
-        // Try native Electron download first (shows save dialog)
         if (window.electron?.downloadFile) {
             const ext = url.split('.').pop()?.split('?')[0] || 'file';
             const filename = `attachment-${Date.now()}.${ext}`;
             try {
                 const result = await window.electron.downloadFile({ url: fullUrl, filename });
-                if (result.success) {
-                    console.log('File downloaded to:', result.path);
-                    return;
-                }
-                if (result.canceled) return; // User cancelled — do nothing
-                // Download failed — fallback to browser
+                if (result.success) return;
+                if (result.canceled) return;
             } catch (err) {
                 console.error('Download failed, opening in browser:', err);
             }
         }
 
-        // Fallback: open in browser
         window.electron?.openExternal?.(fullUrl);
     };
 
@@ -548,7 +969,6 @@ export default function TaskDetails() {
         return acc + st.totalSeconds + (st.isActive ? st.currentSessionSeconds : 0);
     }, 0);
 
-    // Check if task is DONE
     const isDone = task?.status === 'DONE';
     const canEmployeeComplete = task?.employeeCanComplete !== false;
 
@@ -557,339 +977,296 @@ export default function TaskDetails() {
     // ==========================================
     if (loading) {
         return (
-            <div className="h-screen bg-[#111827] flex items-center justify-center">
-                <div className="w-10 h-10 border-4 border-gray-600 border-t-yellow-400 rounded-full animate-spin" />
-            </div>
+            <LoadingWrapper>
+                <Spinner />
+            </LoadingWrapper>
         );
     }
 
     return (
-        <div className="h-screen bg-[#111827] text-white flex flex-col">
+        <PageWrapper>
             {/* Header */}
-            <header className="p-6 border-b border-gray-700 flex-shrink-0 bg-[#1e293b]">
-                <div className="flex items-center justify-between">
+            <HeaderSection>
+                <BackButton onClick={() => navigate('/dashboard')}>
+                    &larr; ড্যাশবোর্ডে ফিরুন
+                </BackButton>
+                <HeaderRow>
                     <div>
-                        <button
-                            onClick={() => navigate('/dashboard')}
-                            className="text-gray-400 hover:text-white text-sm mb-2"
-                        >
-                            &larr; ড্যাশবোর্ডে ফিরুন
-                        </button>
-                        <h1 className="text-2xl font-bold">{task?.title || 'টাস্ক'}</h1>
-                        <div className="flex gap-2 mt-1 flex-wrap">
+                        <TaskTitle>{task?.title || 'টাস্ক'}</TaskTitle>
+                        <BadgeRow>
                             {task?.allowOvertime && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40">⏰ ওভারটাইম</span>
+                                <TagBadge $color="#fbbf24" $bg="rgba(245, 158, 11, 0.15)" $border="rgba(245, 158, 11, 0.3)">⏰ ওভারটাইম</TagBadge>
                             )}
                             {task?.isRecurring && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/40">🔄 {task.recurringType === 'DAILY' ? 'দৈনিক' : task.recurringType === 'WEEKLY' ? 'সাপ্তাহিক' : 'মাসিক'}</span>
+                                <TagBadge $color="#818cf8" $bg="rgba(99, 102, 241, 0.15)" $border="rgba(99, 102, 241, 0.3)">🔄 {task.recurringType === 'DAILY' ? 'দৈনিক' : task.recurringType === 'WEEKLY' ? 'সাপ্তাহিক' : 'মাসিক'}</TagBadge>
                             )}
                             {task?.maxBudget && task.maxBudget > 0 && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/40">💰 ৳{task.maxBudget.toLocaleString()}</span>
+                                <TagBadge $color="#4ade80" $bg="rgba(34, 197, 94, 0.15)" $border="rgba(34, 197, 94, 0.3)">💰 ৳{task.maxBudget.toLocaleString()}</TagBadge>
                             )}
                             {task?.status === 'REVIEW' && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/40">🔍 রিভিউ</span>
+                                <TagBadge $color="#fb923c" $bg="rgba(249, 115, 22, 0.15)" $border="rgba(249, 115, 22, 0.3)">🔍 রিভিউ</TagBadge>
                             )}
                             {isDone && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/40">✅ সম্পন্ন</span>
+                                <TagBadge $color="#4ade80" $bg="rgba(34, 197, 94, 0.15)" $border="rgba(34, 197, 94, 0.3)">✅ সম্পন্ন</TagBadge>
                             )}
                             {task?.breakReminderEnabled && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/40">🧘 বিরতি: {task.breakAfterHours || 2}ঘ পর</span>
+                                <TagBadge $color="#c084fc" $bg="rgba(168, 85, 247, 0.15)" $border="rgba(168, 85, 247, 0.3)">🧘 বিরতি: {task.breakAfterHours || 2}ঘ পর</TagBadge>
                             )}
                             {task?.deadline && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/40">📅 ডেডলাইন: {new Date(task.deadline).toLocaleDateString('bn-BD')}</span>
+                                <TagBadge $color="#60a5fa" $bg="rgba(59, 130, 246, 0.15)" $border="rgba(59, 130, 246, 0.3)">📅 ডেডলাইন: {new Date(task.deadline).toLocaleDateString('bn-BD')}</TagBadge>
                             )}
-                        </div>
+                        </BadgeRow>
                     </div>
 
-                    <div className="text-right">
-                        <p className="text-sm text-gray-400 mb-1">মোট সময়</p>
-                        <p className="text-4xl font-mono font-bold text-yellow-400">
-                            {formatTime(globalTime)}
-                        </p>
-                    </div>
-                </div>
+                    <TimerBlock>
+                        <TimerLabel>মোট সময়</TimerLabel>
+                        <TimerValue>{formatTime(globalTime)}</TimerValue>
+                    </TimerBlock>
+                </HeaderRow>
 
-                {/* Complete Button — only if admin allows AND task is not done */}
                 {canEmployeeComplete && !isDone && (
-                    <button
-                        className="mt-4 px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg font-bold w-full text-lg"
-                        onClick={() => navigate('/dashboard')}
-                    >
+                    <CompleteTaskBtn onClick={() => navigate('/dashboard')}>
                         প্রজেক্ট শেষ করুন
-                    </button>
+                    </CompleteTaskBtn>
                 )}
                 {!canEmployeeComplete && !isDone && (
-                    <div className="mt-4 px-6 py-3 bg-gray-700 rounded-lg text-center text-gray-400 text-sm">
-                        🔒 এই কাজ শুধু এডমিন শেষ করতে পারবে
-                    </div>
+                    <AdminOnlyNote>🔒 এই কাজ শুধু এডমিন শেষ করতে পারবে</AdminOnlyNote>
                 )}
-            </header>
+            </HeaderSection>
 
             {/* Scrollable Content */}
-            <main className="flex-1 overflow-y-auto p-6 space-y-4">
+            <ScrollContent>
 
-                {/* Attachments Section */}
-                {task?.attachments && task.attachments.length > 0 && (
-                    <div className="p-4 bg-[#1e293b] rounded-xl border border-gray-700">
-                        <h3 className="text-sm font-semibold text-gray-400 mb-3">📎 ফাইলসমূহ ({task.attachments.length})</h3>
-                        <div className="space-y-2">
+                {/* Task Description — always visible */}
+                <SectionCard $accent={theme.colors.primary.main}>
+                    <SectionTitle>📝 কাজের বিবরণ</SectionTitle>
+                    {task?.description && task.description.trim() ? (
+                        <DescriptionText>{task.description}</DescriptionText>
+                    ) : (
+                        <PlaceholderText>কোনো বিবরণ দেওয়া হয়নি</PlaceholderText>
+                    )}
+                </SectionCard>
+
+                {/* Screen Recording */}
+                {task?.videoUrl && (
+                    <VideoCard>
+                        <SectionTitle style={{ color: '#818cf8' }}>🎬 স্ক্রিন রেকর্ডিং</SectionTitle>
+                        <VideoRow>
+                            <VideoInfo>
+                                <VideoIcon>🎬</VideoIcon>
+                                <div>
+                                    <VideoName>ভিডিও রেকর্ডিং</VideoName>
+                                    <VideoFileName>{getFileName(task.videoUrl)}</VideoFileName>
+                                </div>
+                            </VideoInfo>
+                            <ActionBtn $variant="indigo" onClick={() => handleDownload(task.videoUrl!)}>
+                                ▶️ দেখুন / ডাউনলোড
+                            </ActionBtn>
+                        </VideoRow>
+                    </VideoCard>
+                )}
+
+                {/* Files & Attachments — always visible */}
+                <SectionCard>
+                    <SectionTitle>
+                        📎 ফাইল ও সংযুক্তি
+                        {task?.attachments && task.attachments.length > 0 && (
+                            <CountBadge>{task.attachments.length}</CountBadge>
+                        )}
+                    </SectionTitle>
+                    {task?.attachments && task.attachments.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {task.attachments.map((url, i) => {
                                 const isImage = /\.(jpg|jpeg|png|gif|webp|svg)/i.test(url.split('?')[0]);
                                 return (
-                                    <div key={i} className="flex items-center justify-between p-2 bg-[#334155] rounded-lg hover:bg-[#475569] transition-colors">
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <FileItem key={i}>
+                                        <FileLeft>
                                             {isImage ? (
-                                                <img src={url} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                                <FileThumb src={url} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                             ) : (
-                                                <span className="text-lg">{getFileIcon(url)}</span>
+                                                <FileIconText>{getFileIcon(url)}</FileIconText>
                                             )}
-                                            <span className="text-sm text-gray-300 truncate">{getFileName(url)}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1 flex-shrink-0">
-                                            <button
-                                                onClick={() => handleDownload(url)}
-                                                className="px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-500/40 rounded-md text-xs font-medium hover:bg-blue-600/30"
-                                            >
+                                            <FileName>{getFileName(url)}</FileName>
+                                        </FileLeft>
+                                        <FileBtnGroup>
+                                            <ActionBtn $variant="primary" onClick={() => handleDownload(url)}>
                                                 ⬇️ ডাউনলোড
-                                            </button>
-                                            <button
-                                                onClick={() => window.electron?.openExternal?.(url.startsWith('http') ? url : `${API_URL.replace('/api', '')}/${url}`)}
-                                                className="px-2 py-1 bg-gray-600/20 text-gray-400 border border-gray-500/40 rounded-md text-xs hover:bg-gray-600/30"
-                                                title="ব্রাউজারে খুলুন"
-                                            >
+                                            </ActionBtn>
+                                            <ActionBtn $variant="ghost" onClick={() => window.electron?.openExternal?.(url.startsWith('http') ? url : `${API_URL.replace('/api', '')}/${url}`)} title="ব্রাউজারে খুলুন">
                                                 🔗
-                                            </button>
-                                        </div>
-                                    </div>
+                                            </ActionBtn>
+                                        </FileBtnGroup>
+                                    </FileItem>
                                 );
                             })}
                         </div>
-                        {task.videoUrl && (
-                            <div className="mt-2 flex items-center justify-between p-2 bg-[#334155] rounded-lg">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-lg">🎬</span>
-                                    <span className="text-sm text-gray-300">ভিডিও</span>
-                                </div>
-                                <button
-                                    onClick={() => handleDownload(task.videoUrl!)}
-                                    className="px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-500/40 rounded-md text-xs font-medium hover:bg-blue-600/30"
-                                >
-                                    ▶️ দেখুন
-                                </button>
-                            </div>
-                        )}
-                        {task.resourceLinks && task.resourceLinks.length > 0 && (
-                            <div className="mt-3">
-                                <h4 className="text-xs text-gray-500 mb-1">🔗 রিসোর্স লিংক</h4>
-                                {task.resourceLinks.map((link, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => window.electron?.openExternal?.(link)}
-                                        className="block text-sm text-blue-400 hover:text-blue-300 truncate mb-1"
-                                    >
-                                        {link}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
+                    ) : (
+                        <PlaceholderText>কোনো ফাইল নেই</PlaceholderText>
+                    )}
+
+                    {/* Resource Links */}
+                    {task?.resourceLinks && task.resourceLinks.length > 0 && (
+                        <div style={{ marginTop: '12px' }}>
+                            <div style={{ fontSize: theme.typography.fontSize.xs, color: theme.colors.text.muted, marginBottom: '4px' }}>🔗 রিসোর্স লিংক</div>
+                            {task.resourceLinks.map((link, i) => (
+                                <ResourceLink key={i} onClick={() => window.electron?.openExternal?.(link)}>
+                                    {link}
+                                </ResourceLink>
+                            ))}
+                        </div>
+                    )}
+                </SectionCard>
 
                 {/* Read-Only Checklist */}
                 {task?.checklist && task.checklist.length > 0 && (
-                    <div className="p-4 bg-[#1e293b] rounded-xl border border-gray-700">
-                        <h3 className="text-sm font-semibold text-gray-400 mb-3">✅ চেকলিস্ট ({task.checklist.filter(c => c.isCompleted).length}/{task.checklist.length})</h3>
-                        <div className="w-full bg-gray-700 rounded-full h-1.5 mb-3 overflow-hidden">
-                            <div className="h-full bg-teal-500 transition-all" style={{ width: `${(task.checklist.filter(c => c.isCompleted).length / task.checklist.length) * 100}%` }} />
-                        </div>
-                        <div className="space-y-1.5">
+                    <SectionCard>
+                        <SectionTitle>✅ চেকলিস্ট ({task.checklist.filter(c => c.isCompleted).length}/{task.checklist.length})</SectionTitle>
+                        <ChecklistBar>
+                            <ChecklistBarFill $pct={(task.checklist.filter(c => c.isCompleted).length / task.checklist.length) * 100} />
+                        </ChecklistBar>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {task.checklist.map(item => (
-                                <div key={item.id} className="flex items-center gap-2 text-sm">
-                                    <span className={item.isCompleted ? 'text-green-400' : 'text-gray-500'}>
-                                        {item.isCompleted ? '✅' : '⬜'}
-                                    </span>
-                                    <span className={item.isCompleted ? 'line-through text-gray-500' : 'text-gray-300'}>
-                                        {item.title}
-                                    </span>
-                                </div>
+                                <ChecklistItem key={item.id} $done={item.isCompleted}>
+                                    <span>{item.isCompleted ? '✅' : '⬜'}</span>
+                                    <span>{item.title}</span>
+                                </ChecklistItem>
                             ))}
                         </div>
-                    </div>
+                    </SectionCard>
                 )}
 
                 {/* Sub-task List */}
                 {subTasks.length === 0 ? (
-                    <div className="text-center text-gray-400 py-10">
-                        <p>কোনো সাব-টাস্ক নেই</p>
-                    </div>
+                    <EmptyState>কোনো সাব-টাস্ক নেই</EmptyState>
                 ) : (
                     subTasks.map((st, idx) => (
-                        <div
+                        <SubTaskCard
                             key={st.id}
-                            className={`p-4 rounded-xl transition-all ${st.isActive
-                                ? 'bg-[#1e293b] border-2 border-yellow-500 shadow-lg shadow-yellow-500/20'
-                                : st.status === 'COMPLETED'
-                                    ? 'bg-[#1e293b]/50 border border-green-800'
-                                    : st.canStart === false
-                                        ? 'bg-[#1e293b]/70 border border-gray-600'
-                                        : 'bg-[#1e293b] border border-gray-700'
-                                }`}
+                            $active={st.isActive}
+                            $completed={st.status === 'COMPLETED'}
+                            $locked={st.canStart === false}
                         >
-                            <div className="flex items-center justify-between">
-                                {/* Left: Status + Title + Schedule Badge */}
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <div className={`w-3 h-3 rounded-full flex-shrink-0 ${st.status === 'COMPLETED'
-                                        ? 'bg-green-500'
-                                        : st.isActive
-                                            ? 'bg-yellow-400 animate-pulse'
-                                            : st.canStart === false
-                                                ? 'bg-gray-600'
-                                                : 'bg-gray-500'
-                                        }`} />
+                            <SubTaskRow>
+                                <SubTaskLeft>
+                                    <StatusDot
+                                        $color={
+                                            st.status === 'COMPLETED' ? theme.colors.status.success :
+                                            st.isActive ? theme.colors.primary.main :
+                                            st.canStart === false ? theme.colors.text.disabled :
+                                            theme.colors.text.muted
+                                        }
+                                        $pulse={st.isActive}
+                                    />
 
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <p className={`font-medium truncate ${st.status === 'COMPLETED' ? 'line-through text-gray-400' : ''}`}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <SubTaskTitle $completed={st.status === 'COMPLETED'}>
                                                 {idx + 1}. {st.title}
-                                            </p>
+                                            </SubTaskTitle>
                                             {st.scheduleStatus && st.scheduleStatus !== 'no_schedule' && (
-                                                <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${st.scheduleStatus === 'active' ? 'bg-green-900/50 text-green-400' :
-                                                    st.scheduleStatus === 'starting_soon' ? 'bg-yellow-900/50 text-yellow-400' :
-                                                        st.scheduleStatus === 'locked' ? 'bg-gray-800 text-gray-400' :
-                                                            'bg-red-900/50 text-red-400'
-                                                    }`}>
+                                                <ScheduleBadge $type={st.scheduleStatus}>
                                                     {st.scheduleStatus === 'locked' && '🔒'}
                                                     {st.scheduleStatus === 'active' && '🟢'}
                                                     {st.scheduleStatus === 'starting_soon' && '⏰'}
                                                     {' '}{st.scheduleLabel}
-                                                </span>
+                                                </ScheduleBadge>
                                             )}
                                         </div>
                                         {st.budgetSeconds && (
-                                            <div className="flex items-center gap-3 mt-1 text-xs">
-                                                <span className="text-gray-500">
-                                                    বাজেট: <span className="text-blue-400">{formatBudget(st.budgetSeconds)}</span>
-                                                </span>
-                                                <span className="text-gray-500">
-                                                    বাকি: <span className={st.remainingBudgetSeconds && st.remainingBudgetSeconds < 3600 ? 'text-red-400' : 'text-gray-400'}>
-                                                        {formatBudget(st.remainingBudgetSeconds)}
-                                                    </span>
-                                                </span>
-                                            </div>
+                                            <BudgetInfo>
+                                                <span>বাজেট: <span style={{ color: '#60a5fa' }}>{formatBudget(st.budgetSeconds)}</span></span>
+                                                <span>বাকি: <span style={{ color: st.remainingBudgetSeconds && st.remainingBudgetSeconds < 3600 ? '#f87171' : theme.colors.text.muted }}>
+                                                    {formatBudget(st.remainingBudgetSeconds)}
+                                                </span></span>
+                                            </BudgetInfo>
                                         )}
-                                        {st.description && !st.budgetSeconds && (
-                                            <p className="text-xs text-gray-400 mt-1 line-clamp-1">
-                                                {st.description}
-                                            </p>
+                                        {st.description && (
+                                            <SubTaskDesc>{st.description}</SubTaskDesc>
                                         )}
                                     </div>
-                                </div>
+                                </SubTaskLeft>
 
-                                {/* Right: Timer + Controls */}
-                                <div className="flex items-center gap-4 flex-shrink-0">
-                                    <div className={`font-mono text-lg ${st.isActive ? 'text-yellow-400' : 'text-gray-400'}`}>
+                                <SubTaskRight>
+                                    <SubTaskTimer $active={st.isActive}>
                                         {formatTime(st.totalSeconds + (st.isActive ? st.currentSessionSeconds : 0))}
-                                    </div>
+                                    </SubTaskTimer>
 
-                                    <div className="flex items-center gap-2">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         {st.status !== 'COMPLETED' && !isDone && (
                                             <>
                                                 {st.isActive ? (
-                                                    <button
-                                                        onClick={() => stopSubTask(st.id)}
-                                                        disabled={actionLoading === st.id}
-                                                        className="w-10 h-10 flex items-center justify-center bg-red-600 hover:bg-red-700 rounded-full text-white disabled:opacity-50"
-                                                    >
+                                                    <CircleBtn $color={theme.colors.status.error} onClick={() => stopSubTask(st.id)} disabled={actionLoading === st.id}>
                                                         ⏹
-                                                    </button>
+                                                    </CircleBtn>
                                                 ) : (
-                                                    <button
+                                                    <CircleBtn
+                                                        $color={st.canStart === false ? theme.colors.text.disabled : theme.colors.status.success}
                                                         onClick={() => startSubTask(st.id)}
                                                         disabled={actionLoading === st.id || st.canStart === false}
-                                                        className={`w-10 h-10 flex items-center justify-center rounded-full text-white disabled:opacity-50 ${st.canStart === false
-                                                            ? 'bg-gray-600 cursor-not-allowed'
-                                                            : 'bg-green-600 hover:bg-green-700'
-                                                            }`}
                                                         title={st.canStart === false ? st.scheduleLabel || 'সময়সূচীর বাইরে' : 'শুরু করুন'}
                                                     >
                                                         {st.canStart === false ? '🔒' : '▶'}
-                                                    </button>
+                                                    </CircleBtn>
                                                 )}
 
                                                 {canEmployeeComplete && (
-                                                    <button
-                                                        onClick={() => completeSubTask(st.id)}
-                                                        disabled={actionLoading === st.id}
-                                                        className="w-10 h-10 flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-full text-white disabled:opacity-50"
-                                                        title="সম্পন্ন করুন"
-                                                    >
+                                                    <CircleBtn $color="#3b82f6" onClick={() => completeSubTask(st.id)} disabled={actionLoading === st.id} title="সম্পন্ন করুন">
                                                         ✓
-                                                    </button>
+                                                    </CircleBtn>
                                                 )}
                                             </>
                                         )}
 
                                         {st.status === 'COMPLETED' && (
-                                            <span className="px-3 py-1 bg-green-900/50 text-green-400 text-sm rounded-full">
-                                                ✓ সম্পন্ন
-                                            </span>
+                                            <CompletedTag>✓ সম্পন্ন</CompletedTag>
                                         )}
                                     </div>
-                                </div>
-                            </div>
-                        </div>
+                                </SubTaskRight>
+                            </SubTaskRow>
+                        </SubTaskCard>
                     ))
                 )}
 
                 {/* Work Journal / Notes Section */}
-                <div className="p-4 bg-[#1e293b] rounded-xl border border-gray-700">
-                    <h3 className="text-sm font-semibold text-gray-400 mb-3">📝 ওয়ার্ক জার্নাল</h3>
+                <SectionCard>
+                    <SectionTitle>📝 ওয়ার্ক জার্নাল</SectionTitle>
 
                     {/* Add Note */}
-                    <div className="flex gap-2 mb-3">
-                        <input
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                        <NoteInput
                             type="text"
                             value={newNote}
                             onChange={e => setNewNote(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleAddNote()}
                             placeholder="নোট লিখুন..."
-                            className="flex-1 bg-[#334155] border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500"
                         />
-                        <button
-                            onClick={handleAddNote}
-                            disabled={notesLoading || !newNote.trim()}
-                            className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex-shrink-0"
-                        >
+                        <NoteSubmitBtn onClick={handleAddNote} disabled={notesLoading || !newNote.trim()}>
                             {notesLoading ? '...' : 'যোগ করুন'}
-                        </button>
+                        </NoteSubmitBtn>
                     </div>
 
                     {/* Notes List */}
                     {notes.length === 0 ? (
-                        <p className="text-xs text-gray-500 text-center py-2">কোনো নোট নেই</p>
+                        <PlaceholderText>কোনো নোট নেই</PlaceholderText>
                     ) : (
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
                             {notes.map(note => (
-                                <div key={note.id} className="flex items-start justify-between p-2 bg-[#334155] rounded-lg">
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm text-gray-300">{note.content}</p>
-                                        <p className="text-xs text-gray-500 mt-1">
+                                <NoteItem key={note.id}>
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                        <NoteContent>{note.content}</NoteContent>
+                                        <NoteMeta>
                                             {note.user?.name || 'Unknown'} &middot; {new Date(note.createdAt).toLocaleString('bn-BD', { dateStyle: 'short', timeStyle: 'short' })}
-                                        </p>
+                                        </NoteMeta>
                                     </div>
-                                    <button
-                                        onClick={() => handleDeleteNote(note.id)}
-                                        className="text-gray-500 hover:text-red-400 text-sm ml-2 flex-shrink-0"
-                                        title="মুছুন"
-                                    >
+                                    <NoteDeleteBtn onClick={() => handleDeleteNote(note.id)} title="মুছুন">
                                         ✕
-                                    </button>
-                                </div>
+                                    </NoteDeleteBtn>
+                                </NoteItem>
                             ))}
                         </div>
                     )}
-                </div>
-            </main>
+                </SectionCard>
+            </ScrollContent>
 
             {/* Proof of Work Modal for Auto-Stop */}
             <ProofOfWorkModal
@@ -898,6 +1275,6 @@ export default function TaskDetails() {
                 onSubmit={handleProofOfWorkSubmit}
                 onClose={() => setShowProofOfWorkModal(false)}
             />
-        </div>
+        </PageWrapper>
     );
 }
