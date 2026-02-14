@@ -27,6 +27,15 @@ interface TaskItem {
     forceSchedule?: boolean;
 }
 
+// Sprint 11: Proof Field Interface
+interface ProofField {
+    id: string;
+    label: string;
+    type: 'TEXT' | 'NUMBER' | 'FILE' | 'DROPDOWN' | 'CHECKBOX';
+    options?: string[];
+    required: boolean;
+}
+
 const DAYS_OF_WEEK = ['রবি', 'সোম', 'মঙ্গল', 'বুধ', 'বৃহ', 'শুক্র', 'শনি'];
 const MAX_SUBTASK_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_MAIN_FILE_SIZE = 100 * 1024 * 1024;
@@ -195,13 +204,6 @@ export default function CreateTaskForm() {
     const [breakAfterHours, setBreakAfterHours] = useState(2);
 
     // Sprint 11: Dynamic Proof Builder
-    interface ProofField {
-        id: string;
-        label: string;
-        type: 'TEXT' | 'NUMBER' | 'FILE' | 'DROPDOWN' | 'CHECKBOX';
-        options?: string[];
-        required: boolean;
-    }
     const [proofSchema, setProofSchema] = useState<ProofField[]>([]);
     const [proofFrequency, setProofFrequency] = useState<'ONCE_DAILY' | 'UNLIMITED'>('UNLIMITED');
 
