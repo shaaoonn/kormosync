@@ -113,8 +113,6 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
                 taskId,
                 subTaskId: subTaskId || null,
                 deviceId: deviceId || null,
-                activeSubTaskIds: activeSubTaskIds || null,
-                activeSubTaskNames: activeSubTaskNames || null,
             },
         });
 
