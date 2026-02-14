@@ -45,9 +45,9 @@ export const SCHEDULE_STATUS_LABELS = {
     no_schedule: { bn: 'যেকোনো সময়', en: 'Anytime', color: '#3b82f6' },
 };
 
-// API URLs
-export const API_URL = 'http://localhost:8001/api';
-export const SOCKET_URL = 'http://localhost:8001';
+// API URLs — uses env variable for production builds, falls back to localhost for dev
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8001';
 
 // Time constants
 export const SECONDS_PER_MINUTE = 60;

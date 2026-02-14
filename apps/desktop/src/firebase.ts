@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, browserSessionPersistence, setPersistence } from "firebase/auth";
+import { getAuth, indexedDBLocalPersistence, setPersistence } from "firebase/auth";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,6 +13,6 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Set session persistence for faster auth state in Electron
-setPersistence(auth, browserSessionPersistence).catch(console.error);
+// Use local persistence so auth survives app restart and window reload in Electron
+setPersistence(auth, indexedDBLocalPersistence).catch(console.error);
 

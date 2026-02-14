@@ -58,9 +58,29 @@ const commonMenuItems: MenuItem[] = [
 export default function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
-    const { user, loading, logout } = useAuth();
+    const { user, token, loading, logout } = useAuth();
     const role = user?.role || "EMPLOYEE";
     const [badges, setBadges] = useState<Record<string, number>>({});
+
+    const [badges, setBadges] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        const fetchBadges = async () => {
+            try {
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/dashboard/badge-counts`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setBadges(res.data || {});
+            } catch {
+                // Silent fail for badges
+            }
+        };
+        if (user) {
+            fetchBadges();
+            const interval = setInterval(fetchBadges, 60000); // Refresh every minute
+            return () => clearInterval(interval);
+        }
+    }, [user]);
 
     const handleLogout = async () => {
         await logout();

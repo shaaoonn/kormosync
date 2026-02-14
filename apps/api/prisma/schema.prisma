@@ -161,9 +161,9 @@ model Company {
   enabledFeatures      String[]          @default(["tasks", "screenshots", "activity", "payroll"])
 
   // Payroll Settings
+  workingDaysPerMonth  Int?                              // Custom working days per month (1-31), null = auto-calculate
   overtimeRate         Float             @default(1.5)   // Overtime multiplier (1.5x)
   defaultExpectedHours Float             @default(8.0)   // Daily expected work hours
-  workingDaysPerMonth  Int               @default(22)    // Working days per month (admin configurable)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -228,13 +228,13 @@ model User {
   overrideExpectedHours        Float?
 
   // Work schedule (HH:mm format strings)
-  workStartTime    String?    // e.g. "09:00"
-  workEndTime      String?    // e.g. "18:00"
-  breakStartTime   String?    // e.g. "13:00"
-  breakEndTime     String?    // e.g. "14:00"
+  workStartTime    String?
+  workEndTime      String?
+  breakStartTime   String?
+  breakEndTime     String?
 
-  // Weekly off days (0=Sunday, 1=Monday ... 5=Friday, 6=Saturday)
-  weeklyOffDays    Int[]      @default([5])  // Default: Friday off (Bangladesh)
+  // Weekly off days (0=Sunday ... 5=Friday, 6=Saturday)
+  weeklyOffDays    Int[]      @default([5])
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -261,6 +261,7 @@ model User {
   reviewerTasks     Task[]          @relation("ReviewerTasks")
   reviewComments    ReviewComment[]
   taskNotes         TaskNote[]
+  taskSubmissions   TaskSubmission[]
 
   @@index([companyId])
   @@index([role])
@@ -338,6 +339,10 @@ model Task {
   manualAllowedApps String[] @default([])
   screenshotInterval Int      @default(5)  // Screenshot interval in minutes (1-60)
 
+  // Dynamic Proof Builder (Sprint 11)
+  proofSchema      Json?      // [{id, label, type: "TEXT"|"NUMBER"|"FILE"|"DROPDOWN"|"CHECKBOX", options?: string[], required: boolean}]
+  proofFrequency   String     @default("UNLIMITED")  // "ONCE_DAILY" | "UNLIMITED"
+
   // Recurring Task Fields
   isRecurring      Boolean        @default(false)
   recurringType    RecurringType?
@@ -385,6 +390,7 @@ model Task {
   customFieldValues TaskCustomFieldValue[]
   reviewComments  ReviewComment[]
   taskNotes       TaskNote[]
+  submissions     TaskSubmission[]
 
   @@index([companyId])
   @@index([status])
@@ -422,10 +428,6 @@ model Screenshot {
   keyboardCount Int      @default(0)
   mouseCount    Int      @default(0)
   activeSeconds Int      @default(300)
-
-  // Multi-subtask metadata (when worker runs 2+ subtasks concurrently)
-  activeSubTaskIds   String?  // Comma-separated IDs of all concurrent subtasks
-  activeSubTaskNames String?  // Comma-separated names for admin display
 
   // Relations
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -506,6 +508,7 @@ model SubTask {
   timeLogs        SubTaskTimeLog[]
   screenshots     Screenshot[]
   workProofs      WorkProof[]
+  submissions     TaskSubmission[]
 
   @@index([taskId])
   @@index([status])
@@ -753,9 +756,9 @@ model LeaveBalance {
   paidLeave     Int      @default(10)
   sickLeave     Int      @default(7)
   unpaidLeave   Int      @default(0)
-  paidUsed      Float    @default(0)
-  sickUsed      Float    @default(0)
-  unpaidUsed    Float    @default(0)
+  paidUsed      Int      @default(0)
+  sickUsed      Int      @default(0)
+  unpaidUsed    Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -910,6 +913,29 @@ model TaskNote {
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([taskId])
+  @@index([userId])
+}
+
+// ============================================================
+// Sprint 11: Dynamic Proof Submissions
+// ============================================================
+model TaskSubmission {
+  id          String   @id @default(uuid())
+  taskId      String
+  subTaskId   String?
+  userId      String
+  answers     Json     // {fieldId: value} — matches task.proofSchema field IDs
+  date        String   // "YYYY-MM-DD" — for ONCE_DAILY overwrite lookup
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  subTask SubTask? @relation(fields: [subTaskId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId, date])  // ONCE_DAILY: one entry per user per day per task
   @@index([taskId])
   @@index([userId])
 }

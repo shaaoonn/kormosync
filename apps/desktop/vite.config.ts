@@ -1,11 +1,14 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import electronPlugin from 'vite-plugin-electron'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+
+  return {
   // Build optimization — smaller bundles = less memory
   build: {
     // Enable chunk splitting for lazy-loaded routes
@@ -40,6 +43,12 @@ export default defineConfig({
               },
             },
           },
+          // Inject env vars into main process at build time
+          // (import.meta.env is not available in Electron main process)
+          define: {
+            'process.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(env.VITE_FIREBASE_AUTH_DOMAIN || ''),
+            'process.env.VITE_GOOGLE_WEB_CLIENT_ID': JSON.stringify(env.VITE_GOOGLE_WEB_CLIENT_ID || ''),
+          },
         },
       },
       preload: {
@@ -66,4 +75,5 @@ export default defineConfig({
       },
     }),
   ],
+  };
 })

@@ -120,7 +120,7 @@ export const getEmployeeProfile = async (req: Request, res: Response) => {
             return;
         }
 
-        // Fix 6B: Verify same company using profile.companyId
+        // Verify same company
         if (requester.companyId !== profile.companyId) {
             res.status(403).json({ error: 'Employee not in your company' });
             return;
@@ -176,11 +176,9 @@ export const getSalaryConfig = async (req: Request, res: Response) => {
                 expectedHoursPerDay: true,
                 minDailyHours: true,
                 currency: true,
-                // Per-employee overrides
                 overrideWorkingDaysPerMonth: true,
                 overrideOvertimeRate: true,
                 overrideExpectedHours: true,
-                // Work schedule
                 workStartTime: true,
                 workEndTime: true,
                 breakStartTime: true,
@@ -198,28 +196,17 @@ export const getSalaryConfig = async (req: Request, res: Response) => {
             return;
         }
 
-        // Fetch company defaults for display
-        let companyWorkingDays = 22;
-        let companyOvertimeRate = 1.5;
-        let companyExpectedHours = 8.0;
-        if (employee.companyId) {
-            const company = await prisma.company.findUnique({
-                where: { id: employee.companyId },
-                select: { workingDaysPerMonth: true, overtimeRate: true, defaultExpectedHours: true }
-            });
-            if (company) {
-                companyWorkingDays = company.workingDaysPerMonth;
-                companyOvertimeRate = company.overtimeRate;
-                companyExpectedHours = company.defaultExpectedHours;
-            }
-        }
+        const company = await prisma.company.findUnique({
+            where: { id: requester.companyId! },
+            select: { workingDaysPerMonth: true, overtimeRate: true, defaultExpectedHours: true }
+        });
 
         res.json({
             success: true,
             salaryConfig: employee,
-            companyWorkingDays,
-            companyOvertimeRate,
-            companyExpectedHours,
+            companyWorkingDays: company?.workingDaysPerMonth ?? 22,
+            companyOvertimeRate: company?.overtimeRate ?? 1.5,
+            companyExpectedHours: company?.defaultExpectedHours ?? 8.0,
         });
     } catch (error) {
         console.error("Get Salary Config Error:", error);
@@ -235,8 +222,7 @@ export const updateSalaryConfig = async (req: Request, res: Response) => {
         const { userId } = req.params;
         const {
             salaryType, monthlySalary, hourlyRate, expectedHoursPerDay, minDailyHours,
-            overrideWorkingDaysPerMonth, overrideOvertimeRate, overrideExpectedHours,
-            workStartTime, workEndTime, breakStartTime, breakEndTime, weeklyOffDays,
+            overrideOvertimeRate, workStartTime, workEndTime, breakStartTime, breakEndTime, weeklyOffDays,
         } = req.body;
 
         if (!user?.uid) {
@@ -271,37 +257,27 @@ export const updateSalaryConfig = async (req: Request, res: Response) => {
             res.status(400).json({ error: 'expectedHoursPerDay must be between 0 and 24' });
             return;
         }
-        // Override validations (null = use company default)
-        if (overrideWorkingDaysPerMonth !== undefined && overrideWorkingDaysPerMonth !== null) {
-            if (overrideWorkingDaysPerMonth < 1 || overrideWorkingDaysPerMonth > 31) {
-                res.status(400).json({ error: 'overrideWorkingDaysPerMonth must be 1-31 or null' });
-                return;
-            }
+
+        // Validate new fields
+        const timeRegex = /^\d{2}:\d{2}$/;
+        if (workStartTime !== undefined && workStartTime !== null && !timeRegex.test(workStartTime)) {
+            res.status(400).json({ error: 'workStartTime must be HH:mm format' }); return;
         }
-        if (overrideOvertimeRate !== undefined && overrideOvertimeRate !== null) {
-            if (overrideOvertimeRate < 1.0) {
-                res.status(400).json({ error: 'overrideOvertimeRate must be >= 1.0 or null' });
-                return;
-            }
+        if (workEndTime !== undefined && workEndTime !== null && !timeRegex.test(workEndTime)) {
+            res.status(400).json({ error: 'workEndTime must be HH:mm format' }); return;
         }
-        if (overrideExpectedHours !== undefined && overrideExpectedHours !== null) {
-            if (overrideExpectedHours < 1 || overrideExpectedHours > 24) {
-                res.status(400).json({ error: 'overrideExpectedHours must be 1-24 or null' });
-                return;
-            }
+        if (breakStartTime !== undefined && breakStartTime !== null && !timeRegex.test(breakStartTime)) {
+            res.status(400).json({ error: 'breakStartTime must be HH:mm format' }); return;
         }
-        // HH:mm format validation
-        const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
-        for (const [field, val] of Object.entries({ workStartTime, workEndTime, breakStartTime, breakEndTime })) {
-            if (val !== undefined && val !== null && !timeRegex.test(val)) {
-                res.status(400).json({ error: `${field} must be in HH:mm format or null` });
-                return;
-            }
+        if (breakEndTime !== undefined && breakEndTime !== null && !timeRegex.test(breakEndTime)) {
+            res.status(400).json({ error: 'breakEndTime must be HH:mm format' }); return;
+        }
+        if (overrideOvertimeRate !== undefined && overrideOvertimeRate !== null && overrideOvertimeRate < 1.0) {
+            res.status(400).json({ error: 'overrideOvertimeRate must be >= 1.0' }); return;
         }
         if (weeklyOffDays !== undefined && Array.isArray(weeklyOffDays)) {
-            if (!weeklyOffDays.every((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)) {
-                res.status(400).json({ error: 'weeklyOffDays must be array of integers 0-6' });
-                return;
+            if (weeklyOffDays.some((d: number) => d < 0 || d > 6 || !Number.isInteger(d))) {
+                res.status(400).json({ error: 'weeklyOffDays must be integers 0-6' }); return;
             }
         }
 
@@ -311,11 +287,7 @@ export const updateSalaryConfig = async (req: Request, res: Response) => {
         if (hourlyRate !== undefined) updateData.hourlyRate = hourlyRate;
         if (expectedHoursPerDay !== undefined) updateData.expectedHoursPerDay = expectedHoursPerDay;
         if (minDailyHours !== undefined) updateData.minDailyHours = minDailyHours;
-        // Override fields (explicitly allow null to clear)
-        if (overrideWorkingDaysPerMonth !== undefined) updateData.overrideWorkingDaysPerMonth = overrideWorkingDaysPerMonth;
         if (overrideOvertimeRate !== undefined) updateData.overrideOvertimeRate = overrideOvertimeRate;
-        if (overrideExpectedHours !== undefined) updateData.overrideExpectedHours = overrideExpectedHours;
-        // Schedule fields
         if (workStartTime !== undefined) updateData.workStartTime = workStartTime;
         if (workEndTime !== undefined) updateData.workEndTime = workEndTime;
         if (breakStartTime !== undefined) updateData.breakStartTime = breakStartTime;
@@ -537,7 +509,7 @@ export const updateProfile = async (req: Request, res: Response) => {
 };
 
 // ============================================================
-// Days Off Calendar (Admin only)
+// Days Off Calendar Endpoints
 // ============================================================
 
 // GET /profile/employee/:userId/days-off?month=YYYY-MM
@@ -548,15 +520,11 @@ export const getDaysOff = async (req: Request, res: Response) => {
         const { userId } = req.params;
         const { month } = req.query; // "YYYY-MM"
 
-        if (!user?.uid) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
-        }
+        if (!user?.uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
         const requester = await prisma.user.findUnique({ where: { firebaseUid: user.uid } });
         if (!requester || (requester.role !== 'OWNER' && requester.role !== 'ADMIN')) {
-            res.status(403).json({ error: 'Admin access required' });
-            return;
+            res.status(403).json({ error: 'Admin access required' }); return;
         }
 
         const employee = await prisma.user.findUnique({
@@ -564,43 +532,31 @@ export const getDaysOff = async (req: Request, res: Response) => {
             select: { companyId: true, weeklyOffDays: true }
         });
         if (!employee || employee.companyId !== requester.companyId) {
-            res.status(403).json({ error: 'Employee not in your company' });
-            return;
+            res.status(403).json({ error: 'Employee not in your company' }); return;
         }
 
-        // Parse month range
-        const now = new Date();
-        let year = now.getFullYear();
-        let mon = now.getMonth(); // 0-indexed
+        let holidays: string[] = [];
         if (month && typeof month === 'string') {
-            const parts = month.split('-');
-            year = parseInt(parts[0]);
-            mon = parseInt(parts[1]) - 1;
+            const [y, m] = month.split('-').map(Number);
+            const startDate = new Date(y, m - 1, 1);
+            const endDate = new Date(y, m, 0); // last day of month
+
+            const records = await prisma.dailyAttendance.findMany({
+                where: {
+                    userId,
+                    status: 'HOLIDAY',
+                    date: { gte: startDate, lte: endDate },
+                },
+                select: { date: true }
+            });
+
+            holidays = records.map(r => {
+                const d = new Date(r.date);
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            });
         }
-        const startDate = new Date(year, mon, 1);
-        const endDate = new Date(year, mon + 1, 0, 23, 59, 59); // Last day of month
 
-        const holidays = await prisma.dailyAttendance.findMany({
-            where: {
-                userId,
-                companyId: requester.companyId!,
-                status: 'HOLIDAY',
-                date: { gte: startDate, lte: endDate },
-            },
-            select: { date: true },
-            orderBy: { date: 'asc' },
-        });
-
-        const holidayDates = holidays.map(h => {
-            const d = new Date(h.date);
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        });
-
-        res.json({
-            success: true,
-            holidays: holidayDates,
-            weeklyOffDays: employee.weeklyOffDays,
-        });
+        res.json({ success: true, holidays, weeklyOffDays: employee.weeklyOffDays });
     } catch (error) {
         console.error("Get Days Off Error:", error);
         res.status(500).json({ error: 'Failed to fetch days off' });
@@ -613,22 +569,13 @@ export const toggleDayOff = async (req: Request, res: Response) => {
         // @ts-ignore
         const user = req.user;
         const { userId } = req.params;
-        const { date, isOff } = req.body; // date: "YYYY-MM-DD", isOff: boolean
+        const { date, isOff } = req.body;
 
-        if (!user?.uid) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
-        }
-
-        if (!date) {
-            res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
-            return;
-        }
+        if (!user?.uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
         const requester = await prisma.user.findUnique({ where: { firebaseUid: user.uid } });
         if (!requester || (requester.role !== 'OWNER' && requester.role !== 'ADMIN')) {
-            res.status(403).json({ error: 'Admin access required' });
-            return;
+            res.status(403).json({ error: 'Admin access required' }); return;
         }
 
         const employee = await prisma.user.findUnique({
@@ -636,18 +583,14 @@ export const toggleDayOff = async (req: Request, res: Response) => {
             select: { companyId: true }
         });
         if (!employee || employee.companyId !== requester.companyId) {
-            res.status(403).json({ error: 'Employee not in your company' });
-            return;
+            res.status(403).json({ error: 'Employee not in your company' }); return;
         }
 
         const dateObj = new Date(date + 'T00:00:00.000Z');
 
         if (isOff) {
-            // Upsert as HOLIDAY
             await prisma.dailyAttendance.upsert({
-                where: {
-                    userId_date: { userId, date: dateObj }
-                },
+                where: { userId_date: { userId, date: dateObj } },
                 create: {
                     userId,
                     companyId: requester.companyId!,
@@ -656,22 +599,12 @@ export const toggleDayOff = async (req: Request, res: Response) => {
                     totalWorkedSeconds: 0,
                     expectedSeconds: 0,
                 },
-                update: {
-                    status: 'HOLIDAY',
-                    totalWorkedSeconds: 0,
-                    expectedSeconds: 0,
-                },
+                update: { status: 'HOLIDAY' },
             });
         } else {
-            // Remove holiday — delete the record or set to ABSENT
-            const existing = await prisma.dailyAttendance.findUnique({
-                where: { userId_date: { userId, date: dateObj } }
+            await prisma.dailyAttendance.deleteMany({
+                where: { userId, date: dateObj, status: 'HOLIDAY' },
             });
-            if (existing && existing.status === 'HOLIDAY') {
-                await prisma.dailyAttendance.delete({
-                    where: { userId_date: { userId, date: dateObj } }
-                });
-            }
         }
 
         res.json({ success: true });
@@ -682,7 +615,7 @@ export const toggleDayOff = async (req: Request, res: Response) => {
 };
 
 // ============================================================
-// Assigned Tasks (Admin view for employee)
+// Assigned Tasks Endpoint
 // ============================================================
 
 // GET /profile/employee/:userId/assigned-tasks
@@ -692,15 +625,11 @@ export const getAssignedTasks = async (req: Request, res: Response) => {
         const user = req.user;
         const { userId } = req.params;
 
-        if (!user?.uid) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
-        }
+        if (!user?.uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
         const requester = await prisma.user.findUnique({ where: { firebaseUid: user.uid } });
         if (!requester || (requester.role !== 'OWNER' && requester.role !== 'ADMIN')) {
-            res.status(403).json({ error: 'Admin access required' });
-            return;
+            res.status(403).json({ error: 'Admin access required' }); return;
         }
 
         const employee = await prisma.user.findUnique({
@@ -708,14 +637,12 @@ export const getAssignedTasks = async (req: Request, res: Response) => {
             select: { companyId: true }
         });
         if (!employee || employee.companyId !== requester.companyId) {
-            res.status(403).json({ error: 'Employee not in your company' });
-            return;
+            res.status(403).json({ error: 'Employee not in your company' }); return;
         }
 
         const tasks = await prisma.task.findMany({
             where: {
                 assignees: { some: { id: userId } },
-                status: { not: 'DONE' },
             },
             select: {
                 id: true,
@@ -728,7 +655,7 @@ export const getAssignedTasks = async (req: Request, res: Response) => {
                 startTime: true,
                 endTime: true,
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy: { deadline: 'asc' },
             take: 50,
         });
 

@@ -1,12 +1,29 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install:*)",
-      "Bash(npm run dev:*)",
-      "Bash(timeout:*)",
-      "Bash(curl:*)",
+      "Bash(node -e:*)",
+      "Bash(npx vite build)",
+      "Bash(set CSC_IDENTITY_AUTO_DISCOVERY=false)",
+      "Bash(npx electron-builder:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: Add missing status and totalSeconds fields to subtask API response\n\nThe /tasks/list and /tasks/:id endpoints were missing status and\ntotalSeconds fields in the subtask select query. This caused the\ndesktop app timer to show 00:00:00 and not increment, because\nstartTaskTracking\\(\\) couldn''t properly find pending subtasks or\nrestore accumulated time.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(npm run build:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: Task hourlyRate fallback when User hourlyRate = 0\n\nWhen user''s hourlyRate is not set \\(0\\), use the highest hourlyRate from\nthe tasks/subtasks that have TimeLogs in the period. Also updated\n_debug diagnostics to show effectiveHourlyRate and fallback status.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(dir:*)",
-      "Bash(taskkill:*)"
+      "Bash(xargs git show:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:developers.google.com)",
+      "Bash(npx asar:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

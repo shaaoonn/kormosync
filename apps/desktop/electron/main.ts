@@ -97,12 +97,38 @@ function createMainWindow() {
         mainWin.loadFile(path.join(DIST, 'index.html'));
     }
 
-    // When main window is closed, minimize to tray if tracking
+    // Allow OAuth popup windows (Google Sign-In) instead of blocking them
+    mainWin.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('https://accounts.google.com') ||
+            url.includes('.firebaseapp.com') ||
+            url.includes('googleapis.com')) {
+            return {
+                action: 'allow',
+                overrideBrowserWindowOptions: {
+                    width: 500,
+                    height: 700,
+                    autoHideMenuBar: true,
+                    webPreferences: {
+                        nodeIntegration: false,
+                        contextIsolation: true,
+                    },
+                },
+            };
+        }
+        // Open other external links in default browser
+        shell.openExternal(url);
+        return { action: 'deny' };
+    });
+
+    // When main window is closed, minimize to tray if tracking, otherwise quit cleanly
     mainWin.on('close', (event) => {
         if (isTracking && tray) {
             event.preventDefault();
             mainWin?.hide();
             // App stays in system tray — no floating widget
+        } else {
+            // Not tracking — ensure hooks are stopped before quit
+            stopHooks();
         }
     });
 
@@ -233,17 +259,24 @@ ipcMain.handle('CAPTURE_SCREENSHOT', async () => {
             thumbnailSize: { width: 1280, height: 720 },
         });
         if (!sources || sources.length === 0) {
+            console.error('[CAPTURE] No screen sources available');
             throw new Error('No screen sources available');
         }
+        console.log(`[CAPTURE] Got ${sources.length} source(s), primary: ${sources[0].name}`);
         const primarySource = sources[0];
         // JPEG quality 70 instead of PNG — ~5x smaller file, much less memory
         const jpegBuffer = primarySource.thumbnail.toJPEG(70);
+        if (!jpegBuffer || jpegBuffer.length === 0) {
+            console.error('[CAPTURE] toJPEG returned empty buffer');
+            throw new Error('Screenshot capture returned empty image');
+        }
         const base64 = jpegBuffer.toString('base64');
         // Explicitly null out references to help GC
         (primarySource as any).thumbnail = null;
+        console.log(`[CAPTURE] Success: ${(jpegBuffer.length / 1024).toFixed(0)}KB`);
         return base64;
     } catch (error) {
-        console.error('Failed to capture screenshot:', error);
+        console.error('[CAPTURE] Failed:', error);
         throw error;
     }
 });
@@ -546,6 +579,189 @@ ipcMain.handle('GET_APP_USAGE', async () => {
 });
 
 // ==========================================
+// Google OAuth for Packaged Electron
+// ==========================================
+// In production, the app loads from file:// so signInWithPopup fails
+// (cross-origin postMessage between https:// popup and file:// parent).
+// This IPC handler opens Google OAuth in a dedicated BrowserWindow,
+// captures the id_token, and returns it to the renderer for signInWithCredential.
+ipcMain.handle('GOOGLE_SIGN_IN', async () => {
+    const authDomain = process.env.VITE_FIREBASE_AUTH_DOMAIN || '';
+    const googleClientId = process.env.VITE_GOOGLE_WEB_CLIENT_ID || '';
+
+    console.log('[GoogleOAuth] Starting Google Sign-In...');
+    console.log('[GoogleOAuth] authDomain:', authDomain);
+    console.log('[GoogleOAuth] clientId:', googleClientId ? `${googleClientId.substring(0, 20)}...` : 'MISSING');
+
+    if (!googleClientId || !authDomain) {
+        throw new Error('Google OAuth not configured: missing VITE_GOOGLE_WEB_CLIENT_ID or VITE_FIREBASE_AUTH_DOMAIN');
+    }
+
+    return new Promise<{ idToken: string }>((resolve, reject) => {
+        let resolved = false;
+        let pollInterval: ReturnType<typeof setInterval> | null = null;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+        const authWin = new BrowserWindow({
+            width: 500,
+            height: 700,
+            parent: mainWin!,
+            modal: true,
+            autoHideMenuBar: true,
+            title: 'Google Sign-In',
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+            },
+        });
+
+        // Build Google OAuth URL — implicit flow returns id_token in URL fragment
+        // NOTE: nonce IS required — Google enforces it since late 2024.
+        // Firebase signInWithCredential doesn't validate nonce, but Google requires one.
+        const crypto = require('crypto');
+        const nonce = crypto.randomBytes(16).toString('hex');
+
+        const params = new URLSearchParams({
+            client_id: googleClientId,
+            redirect_uri: `https://${authDomain}/__/auth/handler`,
+            response_type: 'id_token',
+            scope: 'openid email profile',
+            prompt: 'select_account',
+            nonce,
+        });
+
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+        console.log('[GoogleOAuth] Loading OAuth URL...');
+
+        authWin.loadURL(authUrl);
+
+        // ---- Cleanup helper ----
+        const cleanup = () => {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+            }
+        };
+
+        // ---- Token resolution helper ----
+        const finishWithToken = (idToken: string, source: string) => {
+            if (resolved) return;
+            resolved = true;
+            console.log(`[GoogleOAuth] Token captured via ${source}, length: ${idToken.length}`);
+            cleanup();
+            try { authWin.close(); } catch { /* already closed */ }
+            resolve({ idToken });
+        };
+
+        // ---- Extract id_token from a URL string (fragment or query) ----
+        const tryExtractToken = (url: string): string | null => {
+            try {
+                const parsed = new URL(url);
+                // Try fragment first (#id_token=...)
+                if (parsed.hash && parsed.hash.includes('id_token')) {
+                    const hashParams = new URLSearchParams(parsed.hash.substring(1));
+                    const token = hashParams.get('id_token');
+                    if (token) return token;
+                }
+                // Also try query params as fallback (?id_token=...)
+                const queryToken = parsed.searchParams.get('id_token');
+                if (queryToken) return queryToken;
+            } catch { /* ignore parse errors */ }
+            return null;
+        };
+
+        // ---- Extract id_token from a raw hash string (e.g., "#id_token=xxx&...") ----
+        const tryExtractTokenFromHash = (hash: string): string | null => {
+            if (!hash || !hash.includes('id_token')) return null;
+            try {
+                const hashContent = hash.startsWith('#') ? hash.substring(1) : hash;
+                const hashParams = new URLSearchParams(hashContent);
+                return hashParams.get('id_token');
+            } catch { /* ignore */ }
+            return null;
+        };
+
+        // ---- Navigation event handler (backup — fragments usually stripped in Electron) ----
+        const handleNavigation = (url: string) => {
+            if (resolved) return;
+            console.log('[GoogleOAuth] Navigation:', url.substring(0, 120));
+            const idToken = tryExtractToken(url);
+            if (idToken) {
+                finishWithToken(idToken, 'navigation-event');
+            }
+        };
+
+        // Monitor navigation events as backup
+        authWin.webContents.on('will-navigate', (_event, url) => handleNavigation(url));
+        authWin.webContents.on('will-redirect', (_event, url) => handleNavigation(url));
+        authWin.webContents.on('did-navigate', (_event, url) => handleNavigation(url));
+        authWin.webContents.on('did-redirect-navigation', (_event, url) => handleNavigation(url));
+
+        // ---- Primary strategy: Poll window.location.hash after page loads ----
+        authWin.webContents.on('did-finish-load', () => {
+            const loadedUrl = authWin.webContents.getURL();
+            console.log('[GoogleOAuth] did-finish-load:', loadedUrl.substring(0, 120));
+
+            // Check if this is the Firebase auth handler page
+            if (loadedUrl.includes('/__/auth/handler') || loadedUrl.includes(authDomain)) {
+                console.log('[GoogleOAuth] Firebase handler page detected — starting hash polling');
+
+                // Start polling window.location.hash every 500ms
+                if (pollInterval) clearInterval(pollInterval);
+                pollInterval = setInterval(async () => {
+                    if (resolved) {
+                        if (pollInterval) clearInterval(pollInterval);
+                        return;
+                    }
+                    try {
+                        const hash = await authWin.webContents.executeJavaScript('window.location.hash');
+                        if (hash && hash.includes('id_token')) {
+                            console.log('[GoogleOAuth] Hash poll found token, hash length:', hash.length);
+                            const idToken = tryExtractTokenFromHash(hash);
+                            if (idToken) {
+                                finishWithToken(idToken, 'hash-polling');
+                            }
+                        }
+                    } catch (err: any) {
+                        // Window may have been destroyed — stop polling
+                        console.log('[GoogleOAuth] Poll error (window may be closed):', err?.message);
+                        if (pollInterval) clearInterval(pollInterval);
+                    }
+                }, 500);
+            }
+
+            // Also try immediate extraction from the loaded URL (backup)
+            handleNavigation(loadedUrl);
+        });
+
+        // ---- Timeout: reject after 2 minutes ----
+        timeoutId = setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                console.log('[GoogleOAuth] Timed out after 120 seconds');
+                cleanup();
+                try { authWin.close(); } catch { /* already closed */ }
+                reject(new Error('Google Sign-In timed out. Please try again.'));
+            }
+        }, 120_000);
+
+        // ---- Window closed by user ----
+        authWin.on('closed', () => {
+            console.log('[GoogleOAuth] Auth window closed, resolved:', resolved);
+            cleanup();
+            if (!resolved) {
+                resolved = true;
+                reject(new Error('cancelled'));
+            }
+        });
+    });
+});
+
+// ==========================================
 // Auto-Updater (Phase 6.4)
 // ==========================================
 autoUpdater.autoDownload = false;
@@ -610,6 +826,14 @@ ipcMain.on('QUIT_AND_INSTALL', () => {
 // ==========================================
 // App Lifecycle
 // ==========================================
+// Ensure uIOhook is properly stopped on app exit — prevents high CPU after close
+app.on('before-quit', () => {
+    try { if (hooksStarted) { uIOhook.removeAllListeners(); uIOhook.stop(); hooksStarted = false; } } catch {}
+});
+process.on('exit', () => {
+    try { if (hooksStarted) { uIOhook.stop(); hooksStarted = false; } } catch {}
+});
+
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
