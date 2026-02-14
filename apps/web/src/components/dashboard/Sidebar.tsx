@@ -62,8 +62,6 @@ export default function Sidebar() {
     const role = user?.role || "EMPLOYEE";
     const [badges, setBadges] = useState<Record<string, number>>({});
 
-    const [badges, setBadges] = useState<Record<string, number>>({});
-
     useEffect(() => {
         const fetchBadges = async () => {
             try {

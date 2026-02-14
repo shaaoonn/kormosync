@@ -41,12 +41,6 @@ export default function SettingsPage() {
     const [expectedHours, setExpectedHours] = useState(8);
     const [savingPayroll, setSavingPayroll] = useState(false);
 
-    // Payroll settings state
-    const [workingDays, setWorkingDays] = useState<number>(22);
-    const [overtimeRate, setOvertimeRate] = useState<number>(1.5);
-    const [expectedHours, setExpectedHours] = useState<number>(8);
-    const [savingPayroll, setSavingPayroll] = useState(false);
-
     const isOwner = user?.role === "OWNER";
 
     useEffect(() => {
