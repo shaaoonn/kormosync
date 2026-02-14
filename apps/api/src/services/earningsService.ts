@@ -104,6 +104,8 @@ export interface EarningsBreakdown {
     _debug?: {
         reason: string;
         hourlyRate: number;
+        userHourlyRate?: number;
+        taskHourlyRateFallback?: boolean;
         monthlySalary: number;
         salaryType: string;
         completedTimeLogCount: number;
