@@ -229,6 +229,31 @@ export async function calculateEarnings(
     const totalWorkedSeconds = completedSeconds + activeRunningSeconds;
     const workedHours = parseFloat((totalWorkedSeconds / 3600).toFixed(4));
 
+    // 2b. Fallback: If user has no pay rate, derive from task-level hourlyRate
+    let effectiveHourlyRate = hourlyRate;
+    if (!hourlyRate && !monthlySalary && totalWorkedSeconds > 0) {
+        const taskIds = new Set<string>();
+        for (const tl of completedTimeLogs) { if (tl.taskId) taskIds.add(tl.taskId); }
+        for (const tl of activeTimeLogs) { if (tl.taskId) taskIds.add(tl.taskId); }
+
+        if (taskIds.size > 0) {
+            const tasksWithRates = await prisma.task.findMany({
+                where: { id: { in: Array.from(taskIds) } },
+                select: { hourlyRate: true, subTasks: { select: { hourlyRate: true } } },
+            });
+            for (const task of tasksWithRates) {
+                if (task.hourlyRate && task.hourlyRate > effectiveHourlyRate) {
+                    effectiveHourlyRate = task.hourlyRate;
+                }
+                for (const st of task.subTasks) {
+                    if (st.hourlyRate && st.hourlyRate > effectiveHourlyRate) {
+                        effectiveHourlyRate = st.hourlyRate;
+                    }
+                }
+            }
+        }
+    }
+
     // 3. Calculate paid leave days in the period
     const approvedLeaves = await prisma.leaveRequest.findMany({
         where: {
@@ -319,11 +344,11 @@ export async function calculateEarnings(
 
         grossAmount = parseFloat((workedAmount + leavePay + overtimePay).toFixed(2));
     } else {
-        // Hourly: straightforward
-        workedAmount = parseFloat((workedHours * hourlyRate).toFixed(2));
-        leavePay = parseFloat((leaveHours * hourlyRate).toFixed(2));
-        overtimePay = parseFloat((overtimeHours * hourlyRate * overtimeRate).toFixed(2));
-        penaltyAmount = parseFloat(((deductionMinutes / 60) * hourlyRate).toFixed(2));
+        // Hourly: use effectiveHourlyRate (user rate, or task-level fallback)
+        workedAmount = parseFloat((workedHours * effectiveHourlyRate).toFixed(2));
+        leavePay = parseFloat((leaveHours * effectiveHourlyRate).toFixed(2));
+        overtimePay = parseFloat((overtimeHours * effectiveHourlyRate * overtimeRate).toFixed(2));
+        penaltyAmount = parseFloat(((deductionMinutes / 60) * effectiveHourlyRate).toFixed(2));
 
         grossAmount = parseFloat((workedAmount + leavePay + overtimePay).toFixed(2));
     }
@@ -429,9 +454,11 @@ export async function calculateEarnings(
         currency,
         // Diagnostics for zero-earnings debugging
         _debug: grossAmount === 0 ? {
-            reason: !hourlyRate && !monthlySalary ? 'NO_PAY_RATE' :
+            reason: !effectiveHourlyRate && !monthlySalary ? 'NO_PAY_RATE' :
                     completedTimeLogs.length === 0 && activeTimeLogs.length === 0 ? 'NO_TIME_LOGS' : 'ZERO_HOURS',
-            hourlyRate,
+            hourlyRate: effectiveHourlyRate,
+            userHourlyRate: hourlyRate,
+            taskHourlyRateFallback: effectiveHourlyRate > hourlyRate,
             monthlySalary,
             salaryType,
             completedTimeLogCount: completedTimeLogs.length,
