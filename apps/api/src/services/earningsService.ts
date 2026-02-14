@@ -237,19 +237,23 @@ export async function calculateEarnings(
         for (const tl of activeTimeLogs) { if (tl.taskId) taskIds.add(tl.taskId); }
 
         if (taskIds.size > 0) {
-            const tasksWithRates = await prisma.task.findMany({
-                where: { id: { in: Array.from(taskIds) } },
-                select: { hourlyRate: true, subTasks: { select: { hourlyRate: true } } },
-            });
-            for (const task of tasksWithRates) {
-                if (task.hourlyRate && task.hourlyRate > effectiveHourlyRate) {
-                    effectiveHourlyRate = task.hourlyRate;
-                }
-                for (const st of task.subTasks) {
-                    if (st.hourlyRate && st.hourlyRate > effectiveHourlyRate) {
-                        effectiveHourlyRate = st.hourlyRate;
+            try {
+                const tasksWithRates = await prisma.task.findMany({
+                    where: { id: { in: Array.from(taskIds) } },
+                    select: { hourlyRate: true, subTasks: { select: { hourlyRate: true } } },
+                });
+                for (const task of tasksWithRates) {
+                    if (task.hourlyRate && task.hourlyRate > effectiveHourlyRate) {
+                        effectiveHourlyRate = task.hourlyRate;
+                    }
+                    for (const st of (task.subTasks || [])) {
+                        if (st.hourlyRate && st.hourlyRate > effectiveHourlyRate) {
+                            effectiveHourlyRate = st.hourlyRate;
+                        }
                     }
                 }
+            } catch (err) {
+                console.warn('⚠️ Task hourlyRate fallback failed, using user rate:', err);
             }
         }
     }
