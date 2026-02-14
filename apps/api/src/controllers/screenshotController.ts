@@ -422,3 +422,168 @@ export const bulkDeleteScreenshots = async (req: Request, res: Response) => {
         return res.status(500).json({ success: false, message: 'Failed to delete screenshots' });
     }
 };
+
+/**
+ * Self-delete screenshot (Employee — own screenshots only, within 24h)
+ * Sprint 11: Screenshot Self-Correction / Privacy Feature
+ * Impact: Deletes screenshot + deducts corresponding time from earnings
+ */
+export const selfDeleteScreenshot = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const { screenshotId } = req.params;
+
+        if (!user) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+        const dbUser = await prisma.user.findUnique({
+            where: { firebaseUid: user.uid },
+            select: { id: true, name: true, email: true, companyId: true }
+        });
+        if (!dbUser) return res.status(403).json({ success: false, message: 'User not found' });
+
+        // Fetch screenshot with task info
+        const screenshot = await prisma.screenshot.findUnique({
+            where: { id: screenshotId },
+            include: {
+                task: { select: { id: true, title: true, creatorId: true, screenshotInterval: true, companyId: true } },
+            }
+        });
+
+        if (!screenshot) {
+            return res.status(404).json({ success: false, message: 'Screenshot not found' });
+        }
+
+        // Ownership check: must be own screenshot
+        if (screenshot.userId !== dbUser.id) {
+            return res.status(403).json({ success: false, message: 'You can only delete your own screenshots' });
+        }
+
+        // Time window: must be within 24 hours
+        const hoursSince = (Date.now() - screenshot.recordedAt.getTime()) / (1000 * 60 * 60);
+        if (hoursSince > 24) {
+            return res.status(403).json({
+                success: false,
+                message: '২৪ ঘন্টার বেশি পুরনো স্ক্রিনশট ডিলিট করা যাবে না'
+            });
+        }
+
+        const intervalMinutes = screenshot.task?.screenshotInterval || 5;
+        const deductedSeconds = intervalMinutes * 60;
+
+        // Delete from MinIO
+        await deleteFromMinio(screenshot.screenshotPath).catch((err) => {
+            console.warn('MinIO delete failed (continuing):', err.message);
+        });
+
+        // Delete from database
+        await prisma.screenshot.delete({ where: { id: screenshotId } });
+
+        // Time deduction: find the SubTaskTimeLog covering this screenshot's recordedAt
+        if (screenshot.subTaskId) {
+            const timeLog = await prisma.subTaskTimeLog.findFirst({
+                where: {
+                    subTaskId: screenshot.subTaskId,
+                    userId: dbUser.id,
+                    startTime: { lte: screenshot.recordedAt },
+                    OR: [
+                        { endTime: { gte: screenshot.recordedAt } },
+                        { endTime: null }, // Still running
+                    ],
+                },
+                orderBy: { startTime: 'desc' },
+            });
+
+            if (timeLog && timeLog.durationSeconds) {
+                const newDuration = Math.max(0, timeLog.durationSeconds - deductedSeconds);
+                await prisma.subTaskTimeLog.update({
+                    where: { id: timeLog.id },
+                    data: { durationSeconds: newDuration },
+                });
+            }
+
+            // Also reduce SubTask totalSeconds
+            const subTask = await prisma.subTask.findUnique({
+                where: { id: screenshot.subTaskId },
+                select: { totalSeconds: true },
+            });
+            if (subTask) {
+                await prisma.subTask.update({
+                    where: { id: screenshot.subTaskId },
+                    data: { totalSeconds: Math.max(0, subTask.totalSeconds - deductedSeconds) },
+                });
+            }
+        }
+
+        // Also deduct from main TimeLog if exists
+        if (screenshot.taskId) {
+            const mainTimeLog = await prisma.timeLog.findFirst({
+                where: {
+                    taskId: screenshot.taskId,
+                    userId: dbUser.id,
+                    startTime: { lte: screenshot.recordedAt },
+                    OR: [
+                        { endTime: { gte: screenshot.recordedAt } },
+                        { endTime: null },
+                    ],
+                },
+                orderBy: { startTime: 'desc' },
+            });
+
+            if (mainTimeLog && mainTimeLog.durationSeconds) {
+                const newDuration = Math.max(0, mainTimeLog.durationSeconds - deductedSeconds);
+                await prisma.timeLog.update({
+                    where: { id: mainTimeLog.id },
+                    data: { durationSeconds: newDuration },
+                });
+            }
+        }
+
+        // Decrement company storage
+        if (dbUser.companyId) {
+            const company = await prisma.company.findUnique({
+                where: { id: dbUser.companyId },
+                select: { storageUsed: true },
+            });
+            const newUsed = Math.max(0, (company?.storageUsed || 0) - 0.3);
+            await prisma.company.update({
+                where: { id: dbUser.companyId },
+                data: { storageUsed: newUsed },
+            });
+        }
+
+        // Notify task creator
+        if (screenshot.task?.creatorId) {
+            const recordedTime = screenshot.recordedAt.toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+            await prisma.notification.create({
+                data: {
+                    userId: screenshot.task.creatorId,
+                    title: 'স্ক্রিনশট ডিলিট করা হয়েছে',
+                    message: `${dbUser.name || dbUser.email} "${screenshot.task.title}" টাস্কের ${recordedTime}-এর ${intervalMinutes} মিনিটের স্লট ডিলিট করেছে`,
+                    type: 'WARNING',
+                },
+            });
+        }
+
+        // Socket emit
+        const io = req.app.get('io');
+        if (io && screenshot.task?.companyId) {
+            io.to(`company:${screenshot.task.companyId}`).emit('screenshot:self-deleted', {
+                screenshotId,
+                taskId: screenshot.taskId,
+                userId: dbUser.id,
+                userName: dbUser.name || dbUser.email,
+                deductedSeconds,
+                recordedAt: screenshot.recordedAt,
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: `স্ক্রিনশট ডিলিট হয়েছে এবং ${intervalMinutes} মিনিট সময় কেটে গেছে`,
+            deductedSeconds,
+        });
+    } catch (error) {
+        console.error('Self-delete screenshot error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to delete screenshot' });
+    }
+};

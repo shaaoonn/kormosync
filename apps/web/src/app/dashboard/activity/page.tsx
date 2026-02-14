@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '@/context/AuthContext';
 import { io, Socket } from 'socket.io-client';
-import { Clock, MousePointer, Keyboard, X, ChevronDown, ChevronUp, Layers, CheckCircle, Circle, Calendar, BarChart3, Camera, Eye, Monitor } from 'lucide-react';
+import { Clock, MousePointer, Keyboard, X, ChevronDown, ChevronUp, Layers, CheckCircle, Circle, Calendar, BarChart3, Camera, Eye, Monitor, FileText, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import ActivityTimeline from '@/components/dashboard/ActivityTimeline';
-import { AdminOnly } from "@/components/guards/RoleGuard";
+import { AdminOnly } from '@/components/guards/RoleGuard';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8000';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -66,6 +66,17 @@ interface Employee {
     role: string;
 }
 
+interface TaskSubmission {
+    id: string;
+    taskId: string;
+    subTaskId?: string | null;
+    userId: string;
+    answers: Record<string, any>;
+    date: string;
+    createdAt: string;
+    user?: { id: string; name: string; email: string; profileImage?: string | null };
+}
+
 // ==========================================
 // Utility Functions
 // ==========================================
@@ -120,6 +131,8 @@ export default function ActivityMonitorPage() {
     const [loading, setLoading] = useState(true);
     const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
     const [captureLoading, setCaptureLoading] = useState<string | null>(null);
+    const [submissions, setSubmissions] = useState<Map<string, TaskSubmission[]>>(new Map());
+    const [deletedSlots, setDeletedSlots] = useState<{ userId: string; userName: string; time: string; taskId: string }[]>([]);
 
     const socketRef = useRef<Socket | null>(null);
 
@@ -160,6 +173,23 @@ export default function ActivityMonitorPage() {
                     setScreenshots(activityRes.data.screenshots || []);
                     setTasks(activityRes.data.tasks || []);
                     setActivityLogs(activityRes.data.activityLogs || []); // Pass to ActivityTimeline
+
+                    // Sprint 11: Fetch submissions for each task
+                    const taskIds = (activityRes.data.tasks || []).map((t: Task) => t.id);
+                    for (const taskId of taskIds) {
+                        try {
+                            const subRes = await axios.get(`${API_URL}/submissions/task/${taskId}?date=${selectedDate}`, {
+                                headers: { Authorization: `Bearer ${token}` }
+                            });
+                            if (subRes.data.success && subRes.data.submissions?.length > 0) {
+                                setSubmissions(prev => {
+                                    const updated = new Map(prev);
+                                    updated.set(taskId, subRes.data.submissions);
+                                    return updated;
+                                });
+                            }
+                        } catch { /* submissions may not exist for this task */ }
+                    }
                 }
             } catch (error) {
                 console.error("Failed to fetch data", error);
@@ -214,6 +244,29 @@ export default function ActivityMonitorPage() {
         socketRef.current.on('screenshot:remote-result', (data: any) => {
             setCaptureLoading(null);
             // The screenshot will come through screenshot:new as well
+        });
+
+        // Sprint 11: Listen for self-deleted screenshots
+        socketRef.current.on('screenshot:self-deleted', (data: { screenshotId: string; userId: string; userName: string; taskId: string; recordedAt: string }) => {
+            // Remove screenshot from list
+            setScreenshots(prev => prev.filter(ss => ss.id !== data.screenshotId));
+            // Add to deleted slots for admin notice
+            setDeletedSlots(prev => [...prev, {
+                userId: data.userId,
+                userName: data.userName || 'কর্মী',
+                time: data.recordedAt,
+                taskId: data.taskId,
+            }]);
+        });
+
+        // Sprint 11: Listen for new proof submissions
+        socketRef.current.on('submission:new', (data: TaskSubmission) => {
+            setSubmissions(prev => {
+                const updated = new Map(prev);
+                const existing = updated.get(data.taskId) || [];
+                updated.set(data.taskId, [data, ...existing]);
+                return updated;
+            });
         });
 
         return () => { socketRef.current?.disconnect(); };
@@ -526,6 +579,73 @@ export default function ActivityMonitorPage() {
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Sprint 11: Proof Submissions Section */}
+                                {submissions.get(task.id) && submissions.get(task.id)!.length > 0 && (
+                                    <div className="p-5 border-t border-[#252525]">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <FileText size={16} className="text-emerald-400" />
+                                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">প্রুফ সাবমিশন</h3>
+                                            <span className="text-xs text-gray-600">({submissions.get(task.id)!.length}টি)</span>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {submissions.get(task.id)!.map((sub) => (
+                                                <div key={sub.id} className="p-4 bg-[#1A1A1A] border border-[#333] rounded-lg">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center gap-2">
+                                                            {sub.user?.profileImage ? (
+                                                                <img src={sub.user.profileImage} className="w-6 h-6 rounded-full" alt="" />
+                                                            ) : (
+                                                                <div className="w-6 h-6 rounded-full bg-emerald-600 text-[10px] flex items-center justify-center text-white">
+                                                                    {(sub.user?.name || '?').charAt(0)}
+                                                                </div>
+                                                            )}
+                                                            <span className="text-sm text-gray-300 font-medium">{sub.user?.name || sub.userId}</span>
+                                                        </div>
+                                                        <span className="text-[10px] text-gray-500 font-mono">
+                                                            {new Date(sub.createdAt).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {Object.entries(sub.answers).map(([key, value]) => (
+                                                            <div key={key} className="flex items-start gap-2 text-sm">
+                                                                <span className="text-gray-500 min-w-[100px] text-xs">{key}:</span>
+                                                                {typeof value === 'string' && (value.startsWith('http') || value.startsWith('/')) ? (
+                                                                    <a href={value} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline text-xs truncate">
+                                                                        📎 {value.split('/').pop()?.slice(0, 30)}
+                                                                    </a>
+                                                                ) : (
+                                                                    <span className="text-gray-300 text-xs">{String(value)}</span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Sprint 11: Self-Deleted Screenshot Notices */}
+                                {deletedSlots.filter(d => d.taskId === task.id).length > 0 && (
+                                    <div className="p-5 border-t border-[#252525]">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <Trash2 size={14} className="text-red-400" />
+                                            <h3 className="text-xs font-bold text-red-400 uppercase tracking-widest">ডিলিট করা স্ক্রিনশট</h3>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {deletedSlots.filter(d => d.taskId === task.id).map((slot, idx) => (
+                                                <div key={idx} className="flex items-center gap-3 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-xs">
+                                                    <Trash2 size={12} className="text-red-400" />
+                                                    <span className="text-gray-400">
+                                                        <span className="text-red-400 font-medium">{slot.userName}</span>
+                                                        {' '}{new Date(slot.time).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' })} সময়ের স্ক্রিনশট ডিলিট করেছে — সময় ও বেতন কেটে যাবে
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         );
                     })

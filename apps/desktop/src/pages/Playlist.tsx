@@ -16,6 +16,7 @@ import {
 import { useAppStore } from '../store/useAppStore';
 import { formatDuration, formatRelativeTime, getScheduleInfo } from '../utils/formatters';
 import { proofApi, uploadApi } from '../services/api';
+import DynamicProofForm from '../components/modals/DynamicProofForm';
 import type { SubTask } from '../types';
 import { API_URL } from '../utils/constants';
 
@@ -939,6 +940,7 @@ export const Playlist: React.FC = () => {
 
     const [selectedSubTask, setSelectedSubTask] = useState<SubTask | null>(null);
     const [showProofForm, setShowProofForm] = useState(false);
+    const [showDynamicProofForm, setShowDynamicProofForm] = useState(false);
     const [proofSummary, setProofSummary] = useState('');
     const [proofNotes, setProofNotes] = useState('');
     const [proofFiles, setProofFiles] = useState<File[]>([]);
@@ -970,14 +972,17 @@ export const Playlist: React.FC = () => {
         return fromTimer || selectedSubTask;
     }, [selectedTask, activeSubTaskTimer, selectedSubTask]);
 
-    // Wall-clock total time (from task tracker or fallback to sum)
+    // Wall-clock total time (from task tracker or fallback to max)
+    // Uses wall-clock (TaskTracker) to avoid double-counting concurrent subtasks
     const totalDuration = useMemo(() => {
         if (taskTracker) return taskTracker.wallClockElapsed;
         if (!selectedTask?.subTasks) return 0;
-        return selectedTask.subTasks.reduce((acc, st) => {
+        // Fallback: use MAX of subtask times (wall-clock equivalent)
+        // since concurrent subtasks share wall-clock time
+        return Math.max(0, ...selectedTask.subTasks.map(st => {
             const timer = activeTimers[st.id];
-            return acc + (timer ? timer.elapsedSeconds : (st.trackedTime || 0));
-        }, 0);
+            return timer ? timer.elapsedSeconds : (st.trackedTime || 0);
+        }));
     }, [taskTracker, selectedTask, activeTimers]);
 
     // Time-based progress: totalDuration / totalEstimatedSeconds
@@ -1152,7 +1157,7 @@ export const Playlist: React.FC = () => {
         <PageContainer>
             {/* STICKY HEADER */}
             <StickyHeader>
-                <BackButton onClick={() => { stopAllTimers(); navigate('/dashboard'); }}>
+                <BackButton onClick={() => navigate('/dashboard')}>
                     <ArrowLeftIcon />
                 </BackButton>
                 <HeaderInfo>
@@ -1460,9 +1465,32 @@ export const Playlist: React.FC = () => {
                 </ProofFormWrapper>
             ) : (
                 <BottomActions>
-                    <ProofButton onClick={() => setShowProofForm(true)}>{'\uD83D\uDCCE \u09AA\u09CD\u09B0\u09C1\u09AB \u09AA\u09BE\u09A0\u09BE\u09A8'}</ProofButton>
+                    <ProofButton onClick={() => {
+                        // Sprint 11: If task has proofSchema, show dynamic form; otherwise show legacy inline form
+                        if (selectedTask?.proofSchema && Array.isArray(selectedTask.proofSchema) && selectedTask.proofSchema.length > 0) {
+                            setShowDynamicProofForm(true);
+                        } else {
+                            setShowProofForm(true);
+                        }
+                    }}>{'\uD83D\uDCCE \u09AA\u09CD\u09B0\u09C1\u09AB \u09AA\u09BE\u09A0\u09BE\u09A8'}</ProofButton>
                     <FinishButton onClick={handleFinishProject}>{'\uD83C\uDFC1 \u09AA\u09CD\u09B0\u099C\u09C7\u0995\u09CD\u099F \u09B6\u09C7\u09B7'}</FinishButton>
                 </BottomActions>
+            )}
+
+            {/* Sprint 11: Dynamic Proof Form Modal */}
+            {selectedTask?.proofSchema && selectedTask.proofSchema.length > 0 && (
+                <DynamicProofForm
+                    isOpen={showDynamicProofForm}
+                    onClose={() => setShowDynamicProofForm(false)}
+                    proofSchema={selectedTask.proofSchema}
+                    taskId={selectedTask.id}
+                    subTaskId={activeSubTask?.id}
+                    taskTitle={selectedTask.title}
+                    onSubmitted={() => {
+                        setShowDynamicProofForm(false);
+                        addToast('success', 'প্রুফ ফর্ম জমা হয়েছে!');
+                    }}
+                />
             )}
         </PageContainer>
     );

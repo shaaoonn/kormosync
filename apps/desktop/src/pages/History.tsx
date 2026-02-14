@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import { Card, ProgressBar, SkeletonList } from '../components/ui';
-import { timeLogApi } from '../services/api';
+import { useToast } from '../components/ui/Toast';
+import { timeLogApi, screenshotApi } from '../services/api';
 import {
     formatDateBengali,
     formatTimeBengali,
@@ -314,11 +315,117 @@ const SyncBadge = styled.span<{ $synced: boolean }>`
     border: 1px solid ${({ $synced }) => $synced ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'};
 `;
 
+const DeleteButton = styled.button`
+    background: transparent;
+    border: 1px solid transparent;
+    color: ${theme.colors.text.muted};
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: ${theme.borderRadius.sm};
+    font-size: 14px;
+    line-height: 1;
+    transition: all 0.2s;
+    flex-shrink: 0;
+
+    &:hover {
+        background: ${theme.colors.status.error}20;
+        color: ${theme.colors.status.error};
+        border-color: ${theme.colors.status.error}40;
+    }
+
+    &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+`;
+
+const ConfirmOverlay = styled.div`
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: ${theme.spacing.lg};
+`;
+
+const ConfirmDialog = styled.div`
+    background: ${theme.colors.bg.secondary};
+    border: 1px solid ${theme.colors.border.primary};
+    border-radius: ${theme.borderRadius.lg};
+    padding: ${theme.spacing.xl};
+    max-width: 420px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: ${theme.spacing.md};
+`;
+
+const ConfirmTitle = styled.h3`
+    margin: 0;
+    font-size: ${theme.typography.fontSize.lg};
+    color: ${theme.colors.status.error};
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing.sm};
+`;
+
+const ConfirmText = styled.p`
+    margin: 0;
+    font-size: ${theme.typography.fontSize.md};
+    color: ${theme.colors.text.secondary};
+    line-height: 1.6;
+`;
+
+const ConfirmWarning = styled.div`
+    background: ${theme.colors.status.error}15;
+    border: 1px solid ${theme.colors.status.error}30;
+    border-radius: ${theme.borderRadius.md};
+    padding: ${theme.spacing.md};
+    font-size: ${theme.typography.fontSize.sm};
+    color: ${theme.colors.status.error};
+    line-height: 1.5;
+`;
+
+const ConfirmButtons = styled.div`
+    display: flex;
+    gap: ${theme.spacing.sm};
+    justify-content: flex-end;
+    margin-top: ${theme.spacing.sm};
+`;
+
+const ConfirmBtn = styled.button<{ $danger?: boolean }>`
+    padding: ${theme.spacing.sm} ${theme.spacing.lg};
+    border-radius: ${theme.borderRadius.md};
+    font-size: ${theme.typography.fontSize.md};
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid ${({ $danger }) => $danger ? theme.colors.status.error : theme.colors.border.primary};
+    background: ${({ $danger }) => $danger ? theme.colors.status.error : theme.colors.bg.tertiary};
+    color: ${({ $danger }) => $danger ? 'white' : theme.colors.text.primary};
+
+    &:hover {
+        opacity: 0.85;
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+`;
+
 const History: React.FC = () => {
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [loading, setLoading] = useState(false);
     const [logs, setLogs] = useState<TimeLog[]>([]);
     const [selectedLog, setSelectedLog] = useState<TimeLog | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<TimeLog | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    const toast = useToast();
 
     // Auto-refresh: poll for new entries every 30s when on today's date
     const isToday = selectedDate === new Date().toISOString().split('T')[0];
@@ -468,6 +575,32 @@ const History: React.FC = () => {
         setSelectedDate(date.toISOString().split('T')[0]);
     };
 
+    // Check if screenshot is within 24h window (eligible for self-delete)
+    const isWithin24h = useCallback((recordedAt: string): boolean => {
+        const recorded = new Date(recordedAt).getTime();
+        const now = Date.now();
+        return (now - recorded) < 24 * 60 * 60 * 1000;
+    }, []);
+
+    // Handle screenshot self-delete
+    const handleDeleteScreenshot = useCallback(async () => {
+        if (!deleteTarget) return;
+        setDeleting(true);
+        try {
+            const result = await screenshotApi.selfDelete(deleteTarget.id);
+            // Remove from local logs list
+            setLogs(prev => prev.filter(l => l.id !== deleteTarget.id));
+            const deductedMinutes = Math.round(result.deductedSeconds / 60);
+            toast.success(`স্ক্রিনশট ডিলিট হয়েছে। ${deductedMinutes} মিনিট সময় কাটা হয়েছে।`);
+            setDeleteTarget(null);
+        } catch (err: any) {
+            const msg = err?.message || 'ডিলিট করতে সমস্যা হয়েছে';
+            toast.error(msg);
+        } finally {
+            setDeleting(false);
+        }
+    }, [deleteTarget, toast]);
+
     return (
         <PageWrapper>
             <Header>
@@ -533,6 +666,15 @@ const History: React.FC = () => {
                                                 {log.synced !== false ? '✅ সিংকড' : '🔄 পেন্ডিং'}
                                             </SyncBadge>
                                             <LogTime>{formatTimeBengali(log.recordedAt)}</LogTime>
+                                            {/* Self-delete button: only synced + within 24h */}
+                                            {log.synced !== false && isWithin24h(log.recordedAt) && (
+                                                <DeleteButton
+                                                    title="এই স্ক্রিনশট ডিলিট করুন"
+                                                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(log); }}
+                                                >
+                                                    🗑️
+                                                </DeleteButton>
+                                            )}
                                         </div>
                                     </LogTitle>
                                     <ActivityBar>
@@ -554,6 +696,29 @@ const History: React.FC = () => {
                     </TimelineGroup>
                 )}
             </TimelineContainer>
+
+            {/* Delete Confirmation Dialog */}
+            {deleteTarget && (
+                <ConfirmOverlay onClick={() => !deleting && setDeleteTarget(null)}>
+                    <ConfirmDialog onClick={(e) => e.stopPropagation()}>
+                        <ConfirmTitle>⚠️ স্ক্রিনশট ডিলিট</ConfirmTitle>
+                        <ConfirmText>
+                            আপনি কি {formatTimeBengali(deleteTarget.recordedAt)} সময়ের স্ক্রিনশটটি ডিলিট করতে চান?
+                        </ConfirmText>
+                        <ConfirmWarning>
+                            ⚠️ এই স্ক্রিনশটের সাথে সংশ্লিষ্ট সময় ও বেতন কেটে যাবে। এই পদক্ষেপ পূর্বাবস্থায় ফেরানো যাবে না।
+                        </ConfirmWarning>
+                        <ConfirmButtons>
+                            <ConfirmBtn onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                                বাতিল
+                            </ConfirmBtn>
+                            <ConfirmBtn $danger onClick={handleDeleteScreenshot} disabled={deleting}>
+                                {deleting ? 'ডিলিট হচ্ছে...' : '🗑️ ডিলিট করুন'}
+                            </ConfirmBtn>
+                        </ConfirmButtons>
+                    </ConfirmDialog>
+                </ConfirmOverlay>
+            )}
 
             {/* Full-Screen Screenshot Modal (Read-Only) */}
             {selectedLog && selectedLog.imageUrl && (

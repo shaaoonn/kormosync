@@ -100,6 +100,9 @@ export const createTask = async (req: Request, res: Response) => {
             employeeCanComplete,
             breakReminderEnabled,
             breakAfterHours,
+            // Sprint 11: Dynamic Proof Builder
+            proofSchema,
+            proofFrequency,
         } = req.body;
 
         // Common Data
@@ -141,6 +144,9 @@ export const createTask = async (req: Request, res: Response) => {
             employeeCanComplete: employeeCanComplete !== undefined ? !!employeeCanComplete : true,
             breakReminderEnabled: !!breakReminderEnabled,
             breakAfterHours: breakAfterHours ? parseFloat(breakAfterHours) : 2.0,
+            // Sprint 11: Dynamic Proof Builder
+            proofSchema: Array.isArray(proofSchema) && proofSchema.length > 0 ? proofSchema : undefined,
+            proofFrequency: proofSchema && proofSchema.length > 0 ? (proofFrequency || 'UNLIMITED') : 'UNLIMITED',
         };
 
         // Handle File Uploads (Attachments)

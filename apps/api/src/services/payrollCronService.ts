@@ -171,12 +171,9 @@ export async function approveInvoice(invoiceId: string) {
  * Mark an invoice as paid and credit the employee's wallet.
  */
 export async function payInvoice(invoiceId: string) {
-    const invoice = await prisma.invoice.findUnique({
-        where: { id: invoiceId },
-    });
-
-    if (!invoice || (invoice.status !== 'APPROVED' && invoice.status !== 'DRAFT')) {
-        throw new Error('Invoice not found or not payable');
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice || invoice.status !== 'APPROVED') {
+        throw new Error('Invoice must be APPROVED before payment');
     }
 
     // Ensure wallet exists
@@ -233,7 +230,7 @@ export async function payAllInvoices(payPeriodId: string) {
     const invoices = await prisma.invoice.findMany({
         where: {
             payPeriodId,
-            status: { in: ['DRAFT', 'APPROVED'] },
+            status: 'APPROVED',
         },
     });
 

@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import styled, { css } from 'styled-components';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { theme } from '../../styles/theme';
-import { auth } from '../../firebase';
-import { signOut } from 'firebase/auth';
 // react-hot-toast removed — using built-in Zustand toast system
 
 // Icons need to be sourced. For now using text emojis or basic SVGs if available.
@@ -214,30 +212,17 @@ const LogoutButton = styled.button<{ $expanded: boolean }>`
 
 export const Sidebar: React.FC = () => {
     const [expanded, setExpanded] = useState(false);
-    const navigate = useNavigate();
-    const { activeTimers, logout, addToast, isOffline } = useAppStore();
-    const userRole = (window as any).__DEBUG_USER_ROLE__ || 'User'; // Or fetch from store if available
-    // Better to use auth.currentUser
-    const user = auth.currentUser;
+    const { activeTimers, logout, addToast, isOffline, user } = useAppStore();
+    const userRole = (window as any).__DEBUG_USER_ROLE__ || 'User';
 
     const toggleSidebar = () => setExpanded(!expanded);
 
-    const handleLogout = async () => {
+    const handleLogout = () => {
         if (Object.keys(activeTimers).length > 0) {
-            // We should ideally show a toast or modal here.
-            // For now, simple alert as per user instruction "Show warning"
-            // Using window.confirm or just blocking? User said: "Show warning: Timer running! Return"
             addToast('error', 'টাইমার চলছে! আগে বন্ধ করুন।');
             return;
         }
-
-        try {
-            await signOut(auth);
-            logout(); // Clear store
-            navigate('/login');
-        } catch (error) {
-            console.error("Logout failed", error);
-        }
+        logout(); // signOut(auth) + store cleanup; App.tsx handles redirect
     };
 
     return (
@@ -278,9 +263,9 @@ export const Sidebar: React.FC = () => {
             <SidebarFooter>
                 {user && (
                     <UserInfo>
-                        <UserAvatar>{user.email?.[0].toUpperCase()}</UserAvatar>
+                        <UserAvatar>{(user.email || user.name || '?')[0].toUpperCase()}</UserAvatar>
                         <UserDetails $visible={expanded}>
-                            <UserName>{user.email?.split('@')[0]}</UserName>
+                            <UserName>{user.name || user.email?.split('@')[0] || 'User'}</UserName>
                             <UserRole>{userRole}</UserRole>
                         </UserDetails>
                     </UserInfo>

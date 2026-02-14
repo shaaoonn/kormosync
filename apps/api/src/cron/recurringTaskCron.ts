@@ -29,6 +29,7 @@ async function generateRecurringTasks() {
             isRecurring: true,
             parentTaskId: null, // Only top-level templates
             status: { not: 'DONE' },
+            publishStatus: 'PUBLISHED',
         },
         include: {
             assignees: { select: { id: true } },

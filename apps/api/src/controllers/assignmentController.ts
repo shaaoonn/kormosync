@@ -145,10 +145,16 @@ export const rejectAssignment = async (req: Request, res: Response) => {
             return res.status(400).json({ error: `Assignment already ${assignment.status.toLowerCase()}` });
         }
 
-        const updatedAssignment = await prisma.taskAssignment.update({
-            where: { id: assignmentId },
-            data: { status: 'REJECTED', respondedAt: new Date() }
-        });
+        const [updatedAssignment] = await prisma.$transaction([
+            prisma.taskAssignment.update({
+                where: { id: assignmentId },
+                data: { status: 'REJECTED', respondedAt: new Date() }
+            }),
+            prisma.task.update({
+                where: { id: assignment.taskId },
+                data: { assignees: { disconnect: [{ id: user.id }] } }
+            })
+        ]);
 
         // Notify admin/creator
         await prisma.notification.create({
@@ -186,6 +192,12 @@ export const getTaskAssignments = async (req: Request, res: Response) => {
         if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
         const { taskId } = req.params;
+
+        // Cross-company access check
+        const task = await prisma.task.findUnique({ where: { id: taskId }, select: { companyId: true } });
+        if (!task || task.companyId !== user.companyId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
 
         const assignments = await prisma.taskAssignment.findMany({
             where: { taskId },

@@ -194,6 +194,34 @@ export default function CreateTaskForm() {
     const [breakReminderEnabled, setBreakReminderEnabled] = useState(false);
     const [breakAfterHours, setBreakAfterHours] = useState(2);
 
+    // Sprint 11: Dynamic Proof Builder
+    interface ProofField {
+        id: string;
+        label: string;
+        type: 'TEXT' | 'NUMBER' | 'FILE' | 'DROPDOWN' | 'CHECKBOX';
+        options?: string[];
+        required: boolean;
+    }
+    const [proofSchema, setProofSchema] = useState<ProofField[]>([]);
+    const [proofFrequency, setProofFrequency] = useState<'ONCE_DAILY' | 'UNLIMITED'>('UNLIMITED');
+
+    const addProofField = () => {
+        setProofSchema(prev => [...prev, {
+            id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            label: '',
+            type: 'TEXT',
+            required: false,
+        }]);
+    };
+
+    const updateProofField = (id: string, key: keyof ProofField, value: any) => {
+        setProofSchema(prev => prev.map(f => f.id === id ? { ...f, [key]: value } : f));
+    };
+
+    const removeProofField = (id: string) => {
+        setProofSchema(prev => prev.filter(f => f.id !== id));
+    };
+
     // Advanced Settings
     const [monitoringMode, setMonitoringMode] = useState<'TRANSPARENT' | 'STEALTH'>('TRANSPARENT');
     const [manualAllowedApps, setManualAllowedApps] = useState('');
@@ -502,6 +530,9 @@ export default function CreateTaskForm() {
                     employeeCanComplete,
                     breakReminderEnabled,
                     breakAfterHours: breakReminderEnabled ? breakAfterHours : 2,
+                    // Sprint 11: Dynamic Proof Builder
+                    proofSchema: proofSchema.length > 0 ? proofSchema.filter(f => f.label.trim()) : undefined,
+                    proofFrequency: proofSchema.length > 0 ? proofFrequency : 'UNLIMITED',
                 }, { headers: { Authorization: `Bearer ${token}` } });
             }
 
@@ -916,6 +947,137 @@ export default function CreateTaskForm() {
                                     />
                                 </div>
                             </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 📋 PROOF BUILDER SECTION (Sprint 11) */}
+                <div className="border-t pt-6">
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-emerald-600" />
+                            📋 প্রুফ/রিপোর্ট ফর্ম
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={addProofField}
+                            className="px-3 py-1.5 text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 flex items-center gap-1 font-medium"
+                        >
+                            <Plus className="w-4 h-4" /> ফিল্ড যুক্ত করুন
+                        </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4">
+                        কর্মী টাস্ক শেষ করলে এই ফর্ম পূরণ করতে হবে। ফিল্ড না থাকলে পুরনো প্রুফ সিস্টেম চলবে।
+                    </p>
+
+                    {proofSchema.length > 0 && (
+                        <div className="space-y-3 mb-4">
+                            {proofSchema.map((field, idx) => (
+                                <div key={field.id} className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-emerald-700">ফিল্ড #{idx + 1}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeProofField(field.id)}
+                                            className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {/* Label */}
+                                        <div>
+                                            <label className="text-xs text-gray-500 block mb-1">ফিল্ডের নাম</label>
+                                            <input
+                                                type="text"
+                                                placeholder="যেমন: কয়টা বাগ ফিক্স করেছেন?"
+                                                className="w-full p-2 border rounded-lg text-sm"
+                                                value={field.label}
+                                                onChange={e => updateProofField(field.id, 'label', e.target.value)}
+                                            />
+                                        </div>
+
+                                        {/* Type */}
+                                        <div>
+                                            <label className="text-xs text-gray-500 block mb-1">ফিল্ডের ধরন</label>
+                                            <select
+                                                className="w-full p-2 border rounded-lg text-sm"
+                                                value={field.type}
+                                                onChange={e => updateProofField(field.id, 'type', e.target.value)}
+                                            >
+                                                <option value="TEXT">📝 টেক্সট</option>
+                                                <option value="NUMBER">🔢 সংখ্যা</option>
+                                                <option value="FILE">📎 ফাইল আপলোড</option>
+                                                <option value="DROPDOWN">📋 ড্রপডাউন</option>
+                                                <option value="CHECKBOX">☑️ চেকবক্স</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* DROPDOWN options editor */}
+                                    {field.type === 'DROPDOWN' && (
+                                        <div>
+                                            <label className="text-xs text-gray-500 block mb-1">অপশনগুলো (কমা দিয়ে আলাদা করুন)</label>
+                                            <input
+                                                type="text"
+                                                placeholder="যেমন: সম্পূর্ণ, আংশিক, শুরু হয়নি"
+                                                className="w-full p-2 border rounded-lg text-sm"
+                                                value={(field.options || []).join(', ')}
+                                                onChange={e => updateProofField(field.id, 'options', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Required toggle */}
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={field.required}
+                                            onChange={e => updateProofField(field.id, 'required', e.target.checked)}
+                                            className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                                        />
+                                        <span className="text-xs text-gray-600">বাধ্যতামূলক (Required)</span>
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Frequency selector — only when fields exist */}
+                    {proofSchema.length > 0 && (
+                        <div className="p-4 bg-gray-50 border rounded-lg">
+                            <label className="text-xs text-gray-500 block mb-2">সাবমিশন ফ্রিকোয়েন্সি</label>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setProofFrequency('ONCE_DAILY')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                        proofFrequency === 'ONCE_DAILY'
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-white border text-gray-600 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    📅 প্রতিদিন একবার
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setProofFrequency('UNLIMITED')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                        proofFrequency === 'UNLIMITED'
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-white border text-gray-600 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    ♾️ সীমাহীন
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2">
+                                {proofFrequency === 'ONCE_DAILY'
+                                    ? 'কর্মী দিনে একবার সাবমিট করবে। পুনরায় সাবমিট করলে আগেরটা আপডেট হবে।'
+                                    : 'কর্মী যতবার খুশি সাবমিট করতে পারবে।'
+                                }
+                            </p>
                         </div>
                     )}
                 </div>

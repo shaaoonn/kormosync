@@ -59,6 +59,9 @@ export interface Task {
     attachments?: string[];
     resourceLinks?: string[];
     videoUrl?: string;
+    // Sprint 11: Dynamic Proof Builder
+    proofSchema?: ProofField[];
+    proofFrequency?: 'ONCE_DAILY' | 'UNLIMITED';
     // UI related
     icon?: string;
     currency?: string;
@@ -67,6 +70,15 @@ export interface Task {
         id?: string;
         name?: string;
     };
+}
+
+// Sprint 11: Proof field definition (for dynamic proof forms)
+export interface ProofField {
+    id: string;
+    label: string;
+    type: 'TEXT' | 'NUMBER' | 'FILE' | 'DROPDOWN' | 'CHECKBOX';
+    options?: string[];
+    required: boolean;
 }
 
 // Phase 9: Checklist

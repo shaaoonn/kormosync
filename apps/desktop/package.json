@@ -7,7 +7,8 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
+    "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "preview": "vite preview",
     "dist": "npm run build && electron-builder --win --config"
@@ -15,6 +16,8 @@
   "build": {
     "appId": "com.kormosync.desktop",
     "productName": "KormoSync",
+    "copyright": "Copyright © 2026 KormoSync",
+    "asar": true,
     "directories": {
       "output": "release"
     },
@@ -22,18 +25,38 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "node_modules/uiohook-napi/prebuilds",
+        "to": "prebuilds",
+        "filter": ["**/*"]
+      }
+    ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
       ],
-      "icon": "public/icon.ico"
+      "icon": "public/icon.ico",
+      "artifactName": "KormoSync-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "public/icon.ico",
-      "uninstallerIcon": "public/icon.ico"
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
+      "shortcutName": "KormoSync"
+    },
+    "portable": {
+      "artifactName": "KormoSync-Portable-${version}.${ext}"
     }
   },
   "dependencies": {

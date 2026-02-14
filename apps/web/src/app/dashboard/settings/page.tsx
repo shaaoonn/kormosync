@@ -20,6 +20,9 @@ interface CompanySettings {
     aiCredits: number;
     hasClaimedTrial: boolean;
     trialEmployeeEndDate: string | null;
+    workingDaysPerMonth: number | null;
+    overtimeRate: number;
+    defaultExpectedHours: number;
     createdAt: string;
     _count: { users: number; tasks: number };
 }
@@ -36,6 +39,12 @@ export default function SettingsPage() {
     const [workingDays, setWorkingDays] = useState(22);
     const [overtimeRate, setOvertimeRate] = useState(1.5);
     const [expectedHours, setExpectedHours] = useState(8);
+    const [savingPayroll, setSavingPayroll] = useState(false);
+
+    // Payroll settings state
+    const [workingDays, setWorkingDays] = useState<number>(22);
+    const [overtimeRate, setOvertimeRate] = useState<number>(1.5);
+    const [expectedHours, setExpectedHours] = useState<number>(8);
     const [savingPayroll, setSavingPayroll] = useState(false);
 
     const isOwner = user?.role === "OWNER";
@@ -90,6 +99,10 @@ export default function SettingsPage() {
                 setCompany(res.data.company);
                 setEditName(res.data.company.name);
                 setEditSize(res.data.company.companySize || "1-10");
+                // Populate payroll settings from company data
+                setWorkingDays(res.data.company.workingDaysPerMonth ?? 22);
+                setOvertimeRate(res.data.company.overtimeRate ?? 1.5);
+                setExpectedHours(res.data.company.defaultExpectedHours ?? 8);
             }
         } catch (error) {
             console.error("Failed to fetch settings:", error);
@@ -117,6 +130,42 @@ export default function SettingsPage() {
             toast.error("সেটিংস সেভ করতে ব্যর্থ");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleSavePayroll = async () => {
+        // Validate inputs
+        if (workingDays < 1 || workingDays > 31) {
+            toast.error("Working days must be between 1 and 31");
+            return;
+        }
+        if (overtimeRate < 1.0) {
+            toast.error("Overtime rate must be at least 1.0");
+            return;
+        }
+        if (expectedHours < 1 || expectedHours > 24) {
+            toast.error("Expected hours must be between 1 and 24");
+            return;
+        }
+
+        setSavingPayroll(true);
+        try {
+            const token = await auth.currentUser?.getIdToken();
+            await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/settings/payroll`,
+                {
+                    workingDaysPerMonth: workingDays,
+                    overtimeRate: overtimeRate,
+                    defaultExpectedHours: expectedHours,
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            toast.success("Payroll settings saved!");
+            fetchSettings();
+        } catch (error: any) {
+            const msg = error?.response?.data?.error || "Failed to save payroll settings";
+            toast.error(msg);
+        } finally {
+            setSavingPayroll(false);
         }
     };
 
@@ -187,6 +236,72 @@ export default function SettingsPage() {
                         >
                             <Save className="w-4 h-4" />
                             {saving ? "Saving..." : "Save Changes"}
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Payroll & Attendance Settings Card */}
+            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <div className="flex items-center gap-2 mb-4">
+                    <Clock className="w-5 h-5 text-orange-400" />
+                    <h2 className="text-lg font-semibold text-gray-100">Payroll & Attendance Settings</h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-sm text-gray-400 mb-1">Working Days Per Month</label>
+                        <input
+                            type="number"
+                            min={1}
+                            max={31}
+                            value={workingDays}
+                            onChange={(e) => setWorkingDays(Number(e.target.value))}
+                            disabled={!isOwner}
+                            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">1-31 days (used for salary calculation)</p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm text-gray-400 mb-1">Default Expected Hours/Day</label>
+                        <input
+                            type="number"
+                            min={1}
+                            max={24}
+                            step={0.5}
+                            value={expectedHours}
+                            onChange={(e) => setExpectedHours(Number(e.target.value))}
+                            disabled={!isOwner}
+                            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">1-24 hours per day</p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm text-gray-400 mb-1">Overtime Rate Multiplier</label>
+                        <input
+                            type="number"
+                            min={1.0}
+                            step={0.1}
+                            value={overtimeRate}
+                            onChange={(e) => setOvertimeRate(Number(e.target.value))}
+                            disabled={!isOwner}
+                            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">e.g. 1.5 = 1.5x pay for overtime</p>
+                    </div>
+                </div>
+
+                {isOwner && (
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            onClick={handleSavePayroll}
+                            disabled={savingPayroll}
+                            className="flex items-center gap-2 px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-medium transition disabled:opacity-50"
+                        >
+                            <Save className="w-4 h-4" />
+                            {savingPayroll ? "Saving..." : "Save Payroll Settings"}
                         </button>
                     </div>
                 )}

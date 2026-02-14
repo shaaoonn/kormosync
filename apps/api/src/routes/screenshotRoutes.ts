@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { authenticateUser } from '../middlewares/authMiddleware';
-import { uploadScreenshot, getScreenshots, getScreenshotById, deleteScreenshot, bulkDeleteScreenshots } from '../controllers/screenshotController';
+import { uploadScreenshot, getScreenshots, getScreenshotById, deleteScreenshot, bulkDeleteScreenshots, selfDeleteScreenshot } from '../controllers/screenshotController';
 
 const router = express.Router();
 
@@ -26,6 +26,9 @@ router.get('/list', authenticateUser, getScreenshots);
 
 // Get single screenshot by ID
 router.get('/:screenshotId', authenticateUser, getScreenshotById);
+
+// Employee self-delete own screenshot (within 24h, deducts time)
+router.delete('/:screenshotId/self-delete', authenticateUser, selfDeleteScreenshot);
 
 // Delete single screenshot (Admin only)
 router.delete('/:screenshotId', authenticateUser, deleteScreenshot);

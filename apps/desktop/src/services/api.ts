@@ -54,6 +54,19 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
+// Token refresh mutex — prevents multiple concurrent refreshes on parallel 401s
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+function subscribeTokenRefresh(cb: (token: string) => void) {
+    refreshSubscribers.push(cb);
+}
+
+function onTokenRefreshed(token: string) {
+    refreshSubscribers.forEach(cb => cb(token));
+    refreshSubscribers = [];
+}
+
 // Response interceptor
 api.interceptors.response.use(
     (response) => {
@@ -62,16 +75,48 @@ api.interceptors.response.use(
         }
         return response;
     },
-    (error) => {
+    async (error: AxiosError) => {
         console.error(`❌ API Error: ${error.message} URL: ${error.config?.baseURL}${error.config?.url}`);
         if (error.response) {
             console.error('Response Data:', error.response.data);
             console.error('Response Status:', error.response.status);
         }
-        if (error.response?.status === 401) {
-            // Token expired or invalid - redirect to login
-            window.location.hash = '#/login';
+
+        // Handle 401: mutex-guarded token refresh — only ONE refresh at a time
+        if (error.response?.status === 401 && error.config && !(error.config as any).__isRetry) {
+            const originalConfig = { ...error.config, __isRetry: true } as any;
+
+            if (!isRefreshing) {
+                isRefreshing = true;
+                try {
+                    const user = auth.currentUser;
+                    if (user) {
+                        const newToken = await user.getIdToken(true);
+                        isRefreshing = false;
+                        onTokenRefreshed(newToken);
+                        originalConfig.headers = { ...originalConfig.headers, Authorization: `Bearer ${newToken}` };
+                        return api.request(originalConfig);
+                    }
+                    console.warn('401 received but no Firebase currentUser — auth listener will handle redirect');
+                    isRefreshing = false;
+                    refreshSubscribers = [];
+                } catch (refreshError) {
+                    console.error('Token refresh failed:', refreshError);
+                    isRefreshing = false;
+                    refreshSubscribers = [];
+                    return Promise.reject(refreshError);
+                }
+            } else {
+                // Another refresh is in progress — queue this request
+                return new Promise((resolve) => {
+                    subscribeTokenRefresh((token: string) => {
+                        originalConfig.headers = { ...originalConfig.headers, Authorization: `Bearer ${token}` };
+                        resolve(api.request(originalConfig));
+                    });
+                });
+            }
         }
+
         return Promise.reject(error);
     }
 );
@@ -263,6 +308,15 @@ export const screenshotApi = {
         if (!data.success) throw new Error(data.error);
         return data.screenshots;
     },
+
+    /**
+     * Self-delete own screenshot (employee, within 24h — deducts time)
+     */
+    selfDelete: async (screenshotId: string): Promise<{ deductedSeconds: number }> => {
+        const { data } = await api.delete(`/screenshots/${screenshotId}/self-delete`);
+        if (!data.success) throw new Error(data.error || data.message);
+        return { deductedSeconds: data.deductedSeconds };
+    },
 };
 
 // ============================================================
@@ -342,6 +396,29 @@ export const proofApi = {
         const { data } = await api.get('/proofs/my');
         if (!data.success) throw new Error(data.error);
         return data.proofs;
+    },
+};
+
+// ============================================================
+// Task Submission APIs (Sprint 11 — Dynamic Proof Forms)
+// ============================================================
+export const submissionApi = {
+    /** Submit proof form answers */
+    submit: async (submissionData: {
+        taskId: string;
+        subTaskId?: string;
+        answers: Record<string, any>;
+    }): Promise<any> => {
+        const { data } = await api.post('/submissions/submit', submissionData);
+        if (!data.success) throw new Error(data.error);
+        return data.submission;
+    },
+
+    /** Get my submissions */
+    getMySubmissions: async (): Promise<any[]> => {
+        const { data } = await api.get('/submissions/my');
+        if (!data.success) throw new Error(data.error);
+        return data.submissions;
     },
 };
 

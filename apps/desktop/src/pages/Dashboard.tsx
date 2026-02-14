@@ -6,8 +6,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import styled, { css } from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
 import { API_URL } from '../utils/constants';
 import { theme } from '../styles/theme';
 import {
@@ -793,41 +791,33 @@ export const Dashboard: React.FC = () => {
         }
     };
 
-    // Fetch tasks when user is authenticated
+    // Fetch tasks and dashboard data on mount — auth is handled by App.tsx (single source of truth)
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                console.log('User authenticated, Dashboard.tsx:721');
-                // Always fetch tasks first (cache-first, works offline)
-                fetchTasks();
+        // Always fetch tasks first (cache-first, works offline)
+        fetchTasks();
 
-                // Parallel API calls — each independent, wrapped in try/catch
-                // Auth sync first (critical), then all dashboard data in parallel
-                if (navigator.onLine) {
-                    (async () => {
-                        try {
-                            const { authApi } = await import('../services/api');
-                            await authApi.syncUser();
-                            await authApi.getMe();
-                        } catch (err) {
-                            console.warn('User sync failed, continuing with cached data:', err);
-                        }
-                        // Fire all dashboard data fetches in parallel — no need to wait sequentially
-                        await Promise.allSettled([
-                            fetchPendingAssignments(),
-                            fetchCurrentEarnings(),
-                            fetchLeaveBalance(),
-                            fetchDutyProgress(),
-                        ]);
-                    })();
+        // Parallel API calls — each independent, wrapped in try/catch
+        // Auth sync first (critical), then all dashboard data in parallel
+        if (navigator.onLine) {
+            (async () => {
+                try {
+                    const { authApi } = await import('../services/api');
+                    await authApi.syncUser();
+                    await authApi.getMe();
+                } catch (err) {
+                    console.warn('User sync failed, continuing with cached data:', err);
                 }
-            } else {
-                console.log('User not authenticated, redirecting to login');
-                navigate('/login');
-            }
-        });
-        return () => unsubscribe();
-    }, [fetchTasks, navigate]);
+                // Fire all dashboard data fetches in parallel — no need to wait sequentially
+                await Promise.allSettled([
+                    fetchPendingAssignments(),
+                    fetchCurrentEarnings(),
+                    fetchLeaveBalance(),
+                    fetchDutyProgress(),
+                ]);
+            })();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Run once on mount — auth state managed by App.tsx
 
     // Auto-refresh duty progress every 5 minutes (for all salary types)
     useEffect(() => {
@@ -906,15 +896,30 @@ export const Dashboard: React.FC = () => {
         const completedTasks = tasks.filter(
             (t) => t.status === 'DONE' || t.subTasks?.every((st) => st.status === 'COMPLETED')
         ).length;
-        const totalEarnings = tasks.reduce((acc, task) => {
-            if (!task.hourlyRate) return acc;
-            const trackedHours =
-                (task.subTasks?.reduce((a, st) => a + (st.trackedTime || 0), 0) || 0) / 3600;
-            return acc + trackedHours * task.hourlyRate;
-        }, 0);
-        const activeNow = Object.values(activeTimers).filter(t => !t.isPaused).length;
+        const totalEarnings = (() => {
+            // Local calculation from live timers
+            const localCalc = tasks.reduce((acc, task) => {
+                if (!task.hourlyRate) return acc;
+                const trackedSeconds = task.subTasks?.reduce((a, st) => {
+                    const timer = activeTimers[st.id];
+                    if (timer && !timer.isPaused) {
+                        return a + (timer.elapsedSeconds || 0);
+                    }
+                    return a + (st.totalSeconds || st.trackedTime || 0);
+                }, 0) || 0;
+                return acc + (trackedSeconds / 3600) * task.hourlyRate;
+            }, 0);
+            // Use the higher of local calculation or API-fetched netAmount
+            // API includes leave pay, overtime, penalty adjustments that local doesn't
+            const apiAmount = currentEarnings?.netAmount || 0;
+            return Math.max(localCalc, apiAmount);
+        })();
+        // Count active items: subtask timers OR task trackers (whichever is higher)
+        const activeSubtasks = Object.values(activeTimers).filter(t => !t.isPaused).length;
+        const activeTrackers = Object.values(taskTrackers).filter(t => !t.isPaused).length;
+        const activeNow = Math.max(activeSubtasks, activeTrackers);
         return { totalTrackedToday, totalTasks, completedTasks, totalEarnings, activeNow };
-    }, [tasks, activeTimers, taskTrackers, tickCounter]);
+    }, [tasks, activeTimers, taskTrackers, tickCounter, currentEarnings]);
 
     // Effective duty progress — show for ALL users (fallback 8h default if API returns nothing)
     const effectiveDutyProgress = useMemo(() => {
@@ -930,14 +935,18 @@ export const Dashboard: React.FC = () => {
         } as DutyProgress;
     }, [dutyProgress]);
 
-    // Live-ticking worked seconds: API base + currently-running task trackers
+    // Live-ticking worked seconds: API base + currently-running tracker elapsed only
+    // Note: paused trackers' wallClockAccumulated is already included in API's todayWorkedSeconds
+    // Adding them again would double-count. Only add LIVE elapsed from running trackers.
     const liveWorkedSeconds = useMemo(() => {
         const base = effectiveDutyProgress.todayWorkedSeconds || 0;
         let liveExtra = 0;
         Object.values(taskTrackers).forEach(tracker => {
             if (!tracker.isPaused) {
+                // Only running trackers: live elapsed since last resume
                 liveExtra += Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000);
             }
+            // Paused trackers: already counted in API base — don't add again
         });
         return base + liveExtra;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -962,6 +971,8 @@ export const Dashboard: React.FC = () => {
     // Split tasks into 3 sections
     const { activeTasks, upcomingTasks, completedTasks } = useMemo(() => {
         const activeTimerTaskIds = new Set(Object.values(activeTimers).map(t => t.taskId));
+        // Also include tasks with running TaskTrackers (wall-clock timer)
+        const activeTrackerTaskIds = new Set(Object.keys(taskTrackers).filter(id => !taskTrackers[id].isPaused));
 
         // Active: has running timers OR status is IN_PROGRESS
         const active: Task[] = [];
@@ -975,12 +986,15 @@ export const Dashboard: React.FC = () => {
 
         for (const task of searchedTasks) {
             const isDone = task.status === 'DONE' || task.subTasks?.every((st) => st.status === 'COMPLETED');
-            const isActiveTimer = activeTimerTaskIds.has(task.id);
+            const isActiveTimer = activeTimerTaskIds.has(task.id) || activeTrackerTaskIds.has(task.id);
             const isInProgress = task.status === 'IN_PROGRESS' || task.subTasks?.some((st) => st.status === 'IN_PROGRESS');
 
-            if (isDone) {
+            // Active timer ALWAYS takes priority — even if task is marked DONE
+            if (isActiveTimer) {
+                active.push(task);
+            } else if (isDone) {
                 completed.push(task);
-            } else if (isActiveTimer || isInProgress) {
+            } else if (isInProgress) {
                 active.push(task);
             } else {
                 upcoming.push(task);
@@ -996,7 +1010,7 @@ export const Dashboard: React.FC = () => {
         });
 
         return { activeTasks: active, upcomingTasks: upcoming, completedTasks: completed };
-    }, [searchedTasks, activeTimers]);
+    }, [searchedTasks, activeTimers, taskTrackers]);
 
     // Total running time
     const totalRunningTime = useMemo(() => {
@@ -1022,15 +1036,19 @@ export const Dashboard: React.FC = () => {
     // Helper: render a task row
     const renderTaskRow = (task: Task, sectionType: 'active' | 'upcoming' | 'completed') => {
         const timerForTask = Object.values(activeTimers).filter(t => t.taskId === task.id);
-        const isRunning = timerForTask.some(t => !t.isPaused);
-        const isPaused = timerForTask.some(t => t.isPaused) && !isRunning;
+        const tracker = taskTrackers[task.id];
+        const isRunning = timerForTask.some(t => !t.isPaused) || (tracker && !tracker.isPaused);
+        const isPaused = (timerForTask.some(t => t.isPaused) || (tracker?.isPaused)) && !isRunning;
         const totalTracked = task.subTasks?.reduce((acc, st) => acc + (st.trackedTime || st.totalSeconds || 0), 0) || 0;
         const deadlineInfo = getDeadlineInfo(task.deadline);
         const completedSubs = task.subTasks?.filter(st => st.status === 'COMPLETED').length || 0;
         const totalSubs = task.subTasks?.length || 0;
         const progress = totalSubs > 0 ? (completedSubs / totalSubs) * 100 : 0;
         const earnings = task.hourlyRate ? (totalTracked / 3600) * task.hourlyRate : null;
-        const runningTime = timerForTask.reduce((acc, t) => acc + t.elapsedSeconds, 0);
+        // Use subtask timer time, or fall back to task tracker wall-clock
+        const subtaskRunningTime = timerForTask.reduce((acc, t) => acc + t.elapsedSeconds, 0);
+        const trackerRunningTime = tracker ? (tracker.isPaused ? tracker.wallClockAccumulated : tracker.wallClockAccumulated + Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000)) : 0;
+        const runningTime = Math.max(subtaskRunningTime, trackerRunningTime);
 
         return (
             <TaskListRow

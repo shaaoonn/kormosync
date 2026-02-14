@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
@@ -11,14 +11,18 @@ const Login = () => {
     const [isLoading, setIsLoading] = useState(false);
 
     const navigate = useNavigate();
-    // Import useAppStore
-    const { isAuthenticated } = useAppStore();
+    const { isAuthenticated, clearUserData } = useAppStore();
 
     useEffect(() => {
         if (isAuthenticated) {
             navigate('/dashboard');
         }
     }, [isAuthenticated, navigate]);
+
+    // Defense-in-depth: clear any stale user data (timers, tasks) when login page mounts
+    useEffect(() => {
+        clearUserData();
+    }, [clearUserData]);
 
     const handleEmailLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -38,14 +42,21 @@ const Login = () => {
         setIsLoading(true);
         setError('');
         try {
-            const provider = new GoogleAuthProvider();
-            // Add prompt to always show account picker
-            provider.setCustomParameters({ prompt: 'select_account' });
-            await signInWithPopup(auth, provider);
+            // In Electron, use IPC-based OAuth (bypasses file:// cross-origin popup issues)
+            if (window.electron?.googleSignIn) {
+                const result = await window.electron.googleSignIn();
+                const credential = GoogleAuthProvider.credential(result.idToken);
+                await signInWithCredential(auth, credential);
+            } else {
+                // Fallback for non-Electron environments
+                const provider = new GoogleAuthProvider();
+                provider.setCustomParameters({ prompt: 'select_account' });
+                await signInWithPopup(auth, provider);
+            }
             navigate('/dashboard');
         } catch (err: any) {
             console.error('Google Sign-In Error:', err);
-            if (err.code === 'auth/popup-closed-by-user') {
+            if (err.message === 'cancelled' || err.code === 'auth/popup-closed-by-user') {
                 setError('লগইন বাতিল করা হয়েছে।');
             } else if (err.code === 'auth/network-request-failed' || err.message?.includes('network')) {
                 setError('নেটওয়ার্ক সমস্যা। Email দিয়ে login করুন।');

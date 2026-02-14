@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('electron', {
         return () => ipcRenderer.removeListener('main-process-message', handler);
     },
 
+    // Google OAuth for packaged Electron (bypasses signInWithPopup cross-origin issues)
+    googleSignIn: () => ipcRenderer.invoke('GOOGLE_SIGN_IN'),
+
     // Auto-Updater (Phase 6.4)
     checkForUpdates: () => ipcRenderer.invoke('CHECK_FOR_UPDATES'),
     downloadUpdate: () => ipcRenderer.invoke('DOWNLOAD_UPDATE'),
@@ -107,6 +110,8 @@ declare global {
             onStopTracking: (callback: () => void) => () => void;
             onScheduleAutoStop: (callback: (data: { taskName: string; reason: string }) => void) => () => void;
             onUpdate: (callback: any) => () => void;
+            // Google OAuth
+            googleSignIn: () => Promise<{ idToken: string }>;
             // Auto-Updater
             checkForUpdates: () => Promise<{ success: boolean; version?: string; error?: string }>;
             downloadUpdate: () => Promise<{ success: boolean; error?: string }>;

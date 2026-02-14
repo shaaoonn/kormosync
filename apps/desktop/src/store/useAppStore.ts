@@ -19,6 +19,8 @@ import { generateId, getScheduleInfo } from '../utils/formatters';
 import { DEFAULT_SETTINGS } from '../utils/constants';
 import { cacheTasks, getCachedTasks, clearTaskCache } from '../utils/taskCache';
 import { addLocalHistoryEntry, clearHistoryCache } from '../utils/historyCache';
+import { signOut } from 'firebase/auth';
+import { auth } from '../firebase';
 
 // Screenshot concurrency guard — prevent overlapping uploads
 let screenshotInProgress = false;
@@ -32,8 +34,18 @@ let lastApiSuccess = Date.now();
 let consecutiveApiFailures = 0;
 let screenshotConsecutiveFails = 0;
 const MAX_SCREENSHOT_FAILS = 3;        // After 3 fails, pause screenshots for cooldown
-const SCREENSHOT_COOLDOWN_MS = 600000; // 10 minute cooldown after max failures
+const SCREENSHOT_COOLDOWN_MS = 120000; // 2 minute cooldown after max failures (reduced from 10min)
 let screenshotCooldownUntil = 0;
+
+// API call debouncing — prevent rapid play/pause from spamming backend
+let lastTimerApiCallTime = 0;
+const TIMER_API_DEBOUNCE_MS = 500;
+function shouldCallTimerApi(): boolean {
+    const now = Date.now();
+    if (now - lastTimerApiCallTime < TIMER_API_DEBOUNCE_MS) return false;
+    lastTimerApiCallTime = now;
+    return true;
+}
 
 function markApiSuccess() {
     lastApiSuccess = Date.now();
@@ -75,7 +87,11 @@ function startRecoveryProbe() {
         recoveryProbeRunning = true;
         try {
             // Lightweight check — API root "/" has no DB queries, no auth
-            const response = await fetch('http://localhost:8001/', {
+            // Use the actual API base URL (production or localhost) instead of hardcoded localhost
+            const apiModule = await getApiModule();
+            const baseUrl = apiModule.api.defaults.baseURL || 'http://localhost:8001/api';
+            const probeUrl = baseUrl.replace(/\/api\/?$/, '/');
+            const response = await fetch(probeUrl, {
                 method: 'GET',
                 signal: AbortSignal.timeout(5000), // 5s timeout
             });
@@ -148,6 +164,8 @@ interface TaskTracker {
     monitoringMode: 'TRANSPARENT' | 'STEALTH';
     // Track which subtasks were running before pause (for resume)
     pausedSubTaskIds: string[];
+    // Server-side TimeLog ID — needed for earnings calculation via earningsService
+    timeLogId?: string;
 }
 
 // Export for use in components
@@ -205,6 +223,7 @@ interface AppState {
     // Actions - User
     setUser: (user: User | null) => void;
     logout: () => void;
+    clearUserData: () => void;
 
     // Actions - Navigation
     setCurrentNav: (nav: NavItem) => void;
@@ -313,6 +332,13 @@ export const useAppStore = create<AppState>()(
 
             logout: () => {
                 get().stopAllTimers();
+                // Clean up recovery probe to prevent API calls after logout
+                if (recoveryProbeInterval) {
+                    clearInterval(recoveryProbeInterval);
+                    recoveryProbeInterval = null;
+                    recoveryProbeRunning = false;
+                }
+                signOut(auth).catch((err) => console.error('Firebase signOut failed:', err));
                 clearTaskCache().catch(() => {}); // Clear offline cache on logout
                 clearHistoryCache().catch(() => {}); // Clear history cache on logout
                 set({
@@ -322,7 +348,36 @@ export const useAppStore = create<AppState>()(
                     activeTimers: {},
                     taskTrackers: {},
                     selectedTaskId: null,
+                    selectedTask: null,
+                    todayStats: {
+                        totalSeconds: 0,
+                        totalKeystrokes: 0,
+                        totalMouseClicks: 0,
+                        averageActivity: 0,
+                        sessionsCount: 0,
+                    },
                     isOffline: false,
+                    pendingSyncCount: 0,
+                });
+            },
+
+            clearUserData: () => {
+                get().stopAllTimers();
+                clearTaskCache().catch(() => {});
+                clearHistoryCache().catch(() => {});
+                set({
+                    tasks: [],
+                    activeTimers: {},
+                    taskTrackers: {},
+                    selectedTaskId: null,
+                    selectedTask: null,
+                    todayStats: {
+                        totalSeconds: 0,
+                        totalKeystrokes: 0,
+                        totalMouseClicks: 0,
+                        averageActivity: 0,
+                        sessionsCount: 0,
+                    },
                     pendingSyncCount: 0,
                 });
             },
@@ -484,6 +539,35 @@ export const useAppStore = create<AppState>()(
                             },
                         },
                     }));
+
+                    // Create server-side TimeLog for auto-created tracker (for earnings) — with 1 retry
+                    if (navigator.onLine && isApiHealthy()) {
+                        const createTimeLog = async (retriesLeft = 1) => {
+                            try {
+                                const { taskApi } = await getApiModule();
+                                const { timeLogId } = await taskApi.startTask(task.id);
+                                console.log('[TIMELOG] Auto-created:', timeLogId, 'task:', task.id.slice(0,8));
+                                set((state) => {
+                                    const existing = state.taskTrackers[task.id];
+                                    if (existing) {
+                                        return { taskTrackers: { ...state.taskTrackers, [task.id]: { ...existing, timeLogId } } };
+                                    }
+                                    return {};
+                                });
+                                markApiSuccess();
+                                window.dispatchEvent(new CustomEvent('earnings-update'));
+                            } catch (err: any) {
+                                console.error('[TIMELOG] Auto-create failed:', err?.message);
+                                if (retriesLeft > 0) {
+                                    console.log('[TIMELOG] Retrying in 5s...');
+                                    setTimeout(() => createTimeLog(retriesLeft - 1), 5000);
+                                } else {
+                                    markApiFailure();
+                                }
+                            }
+                        };
+                        createTimeLog();
+                    }
                 } else {
                     // If tracker exists but is paused (last subtask stopped), resume it
                     const existingTracker = get().taskTrackers[task.id];
@@ -539,6 +623,14 @@ export const useAppStore = create<AppState>()(
                 });
 
                 get().addToast('success', `${subTask.title} শুরু হয়েছে`);
+
+                // Notify backend that subtask tracking started (creates SubTaskTimeLog)
+                if (navigator.onLine && isApiHealthy()) {
+                    import('../services/api').then(({ subTaskApi }) => {
+                        subTaskApi.start(subTask.id).catch(err =>
+                            console.warn('[TIMELOG] SubTask start failed:', err?.message));
+                    }).catch(() => {});
+                }
             },
 
             pauseTimer: (subTaskId) => {
@@ -570,6 +662,40 @@ export const useAppStore = create<AppState>()(
                         console.error('[SYNC] Failed to sync subtask time on pause:', err)
                     );
                 }).catch(() => {});
+
+                // Close SubTaskTimeLog on backend (pause = stop server-side)
+                if (navigator.onLine && isApiHealthy()) {
+                    import('../services/api').then(({ subTaskApi }) => {
+                        subTaskApi.stop(subTaskId).catch(err =>
+                            console.warn('[TIMELOG] SubTask pause-stop failed:', err?.message));
+                    }).catch(() => {});
+                }
+
+                // Auto-pause TaskTracker when ALL subtasks for this task are paused/stopped
+                // (mirrors stopTimer behavior at lines 720-743)
+                const taskId = timer.taskId;
+                const remainingActive = Object.values(get().activeTimers)
+                    .filter(t => t.taskId === taskId && !t.isPaused && t.subTaskId !== subTaskId);
+                if (remainingActive.length === 0) {
+                    const tracker = get().taskTrackers[taskId];
+                    if (tracker && !tracker.isPaused) {
+                        const elapsed = Math.floor((Date.now() - tracker.wallClockStartedAt) / 1000);
+                        const totalWall = tracker.wallClockAccumulated + elapsed;
+                        console.log(`[PAUSE] Last subtask paused — auto-pausing TaskTracker for task=${taskId.slice(0,8)}, wall=${totalWall}s`);
+                        set((state) => ({
+                            taskTrackers: {
+                                ...state.taskTrackers,
+                                [taskId]: {
+                                    ...tracker,
+                                    isPaused: true,
+                                    wallClockAccumulated: totalWall,
+                                    wallClockElapsed: totalWall,
+                                    wallClockStartedAt: Date.now(),
+                                },
+                            },
+                        }));
+                    }
+                }
             },
 
             resumeTimer: (subTaskId) => {
@@ -586,6 +712,32 @@ export const useAppStore = create<AppState>()(
                         },
                     },
                 }));
+
+                // Auto-resume TaskTracker if it was auto-paused
+                // (mirrors startTimer auto-resume behavior at lines 556-569)
+                const taskId = timer.taskId;
+                const tracker = get().taskTrackers[taskId];
+                if (tracker && tracker.isPaused) {
+                    console.log(`[RESUME] Subtask resumed — auto-resuming TaskTracker for task=${taskId.slice(0,8)}`);
+                    set((state) => ({
+                        taskTrackers: {
+                            ...state.taskTrackers,
+                            [taskId]: {
+                                ...tracker,
+                                isPaused: false,
+                                wallClockStartedAt: Date.now(),
+                            },
+                        },
+                    }));
+                }
+
+                // Re-open SubTaskTimeLog on backend (creates new time log entry)
+                if (navigator.onLine && isApiHealthy()) {
+                    import('../services/api').then(({ subTaskApi }) => {
+                        subTaskApi.start(subTaskId).catch(err =>
+                            console.warn('[TIMELOG] SubTask resume failed:', err?.message));
+                    }).catch(() => {});
+                }
             },
 
             stopTimer: (subTaskId) => {
@@ -608,6 +760,14 @@ export const useAppStore = create<AppState>()(
                         console.error('[SYNC] Failed to sync subtask time on stop:', err)
                     );
                 }).catch(() => {});
+
+                // Close SubTaskTimeLog on backend
+                if (navigator.onLine && isApiHealthy()) {
+                    import('../services/api').then(({ subTaskApi }) => {
+                        subTaskApi.stop(subTaskId).catch(err =>
+                            console.warn('[TIMELOG] SubTask stop failed:', err?.message));
+                    }).catch(() => {});
+                }
 
                 // Remove from active timers
                 const taskId = timer.taskId;
@@ -644,11 +804,30 @@ export const useAppStore = create<AppState>()(
             },
 
             stopAllTimers: () => {
-                const { activeTimers } = get();
+                const { activeTimers, taskTrackers } = get();
+
+                // Stop all subtask timers (syncs time to backend)
                 Object.keys(activeTimers).forEach((subTaskId) => {
                     get().stopTimer(subTaskId);
                 });
-                // Also clear all task trackers
+
+                // Close all task-level TimeLogs (for earnings)
+                Object.values(taskTrackers).forEach(tracker => {
+                    if (tracker.timeLogId && navigator.onLine && isApiHealthy()) {
+                        import('../services/api').then(({ taskApi }) => {
+                            taskApi.stopTask(tracker.timeLogId!).then(() => {
+                                console.log('[TIMELOG] StopAll closed:', tracker.timeLogId);
+                                markApiSuccess();
+                                window.dispatchEvent(new CustomEvent('earnings-update'));
+                            }).catch(err => {
+                                console.error('[TIMELOG] StopAll failed:', err?.message);
+                                markApiFailure();
+                            });
+                        }).catch(() => {});
+                    }
+                });
+
+                // Clear all task trackers
                 set({ taskTrackers: {} });
                 window.electron?.trackingStopped?.();
             },
@@ -714,12 +893,14 @@ export const useAppStore = create<AppState>()(
                     },
                 }));
 
-                // Auto-start first pending subtask if none are running
+                // Auto-start first subtask if none are running
+                // Prefer pending subtask, but fallback to last subtask if ALL are completed
                 const runningForTask = Object.values(activeTimers).filter(t => t.taskId === task.id);
                 if (runningForTask.length === 0 && task.subTasks && task.subTasks.length > 0) {
                     const firstPending = task.subTasks.find(st => st.status !== 'COMPLETED');
-                    if (firstPending) {
-                        get().startTimer(firstPending, task);
+                    const firstToStart = firstPending || task.subTasks[task.subTasks.length - 1];
+                    if (firstToStart) {
+                        get().startTimer(firstToStart, task);
                     }
                 }
 
@@ -730,6 +911,37 @@ export const useAppStore = create<AppState>()(
                     taskName: task.title,
                     monitoringMode: task.monitoringMode || 'TRANSPARENT',
                 });
+
+                console.log(`[TRACKER] Created: task=${task.id.slice(0,8)}, screenshotEnabled=${task.screenshotEnabled !== false}, interval=${screenshotInterval}min`);
+
+                // Create server-side TimeLog (for earnings calculation) — with 1 retry
+                if (navigator.onLine && isApiHealthy()) {
+                    const createTimeLog = async (retriesLeft = 1) => {
+                        try {
+                            const { taskApi } = await getApiModule();
+                            const { timeLogId } = await taskApi.startTask(task.id);
+                            console.log('[TIMELOG] Started:', timeLogId, 'task:', task.id.slice(0,8));
+                            set((state) => {
+                                const existing = state.taskTrackers[task.id];
+                                if (existing) {
+                                    return { taskTrackers: { ...state.taskTrackers, [task.id]: { ...existing, timeLogId } } };
+                                }
+                                return {};
+                            });
+                            markApiSuccess();
+                            window.dispatchEvent(new CustomEvent('earnings-update'));
+                        } catch (err: any) {
+                            console.error('[TIMELOG] Start failed:', err?.message);
+                            if (retriesLeft > 0) {
+                                console.log('[TIMELOG] Retrying in 5s...');
+                                setTimeout(() => createTimeLog(retriesLeft - 1), 5000);
+                            } else {
+                                markApiFailure();
+                            }
+                        }
+                    };
+                    createTimeLog();
+                }
             },
 
             pauseTaskTracking: (taskId) => {
@@ -763,6 +975,19 @@ export const useAppStore = create<AppState>()(
                         },
                     },
                 }));
+
+                // Close the task-level TimeLog on pause (so earnings reflect actual work)
+                if (tracker.timeLogId && navigator.onLine && isApiHealthy()) {
+                    import('../services/api').then(({ taskApi }) => {
+                        taskApi.stopTask(tracker.timeLogId!).then(() => {
+                            console.log('[TIMELOG] Paused:', tracker.timeLogId);
+                            markApiSuccess();
+                        }).catch(err => {
+                            console.error('[TIMELOG] Pause-stop failed:', err?.message);
+                            markApiFailure();
+                        });
+                    }).catch(() => {});
+                }
             },
 
             resumeTaskTracking: (taskId) => {
@@ -786,11 +1011,54 @@ export const useAppStore = create<AppState>()(
                 tracker.pausedSubTaskIds.forEach(subId => {
                     get().resumeTimer(subId);
                 });
+
+                // Create a new TimeLog for the resumed session (for earnings) — with 1 retry
+                if (navigator.onLine && isApiHealthy()) {
+                    const createTimeLog = async (retriesLeft = 1) => {
+                        try {
+                            const { taskApi } = await getApiModule();
+                            const { timeLogId } = await taskApi.startTask(taskId);
+                            console.log('[TIMELOG] Resumed with new TimeLog:', timeLogId);
+                            set((state) => {
+                                const existing = state.taskTrackers[taskId];
+                                if (existing) {
+                                    return { taskTrackers: { ...state.taskTrackers, [taskId]: { ...existing, timeLogId } } };
+                                }
+                                return {};
+                            });
+                            markApiSuccess();
+                            window.dispatchEvent(new CustomEvent('earnings-update'));
+                        } catch (err: any) {
+                            console.error('[TIMELOG] Resume-start failed:', err?.message);
+                            if (retriesLeft > 0) {
+                                console.log('[TIMELOG] Retrying in 5s...');
+                                setTimeout(() => createTimeLog(retriesLeft - 1), 5000);
+                            } else {
+                                markApiFailure();
+                            }
+                        }
+                    };
+                    createTimeLog();
+                }
             },
 
             stopTaskTracking: (taskId) => {
                 const tracker = get().taskTrackers[taskId];
                 if (!tracker) return;
+
+                // Close the server-side TimeLog (for earnings)
+                if (tracker.timeLogId && navigator.onLine && isApiHealthy()) {
+                    import('../services/api').then(({ taskApi }) => {
+                        taskApi.stopTask(tracker.timeLogId!).then(() => {
+                            console.log('[TIMELOG] Stopped:', tracker.timeLogId);
+                            markApiSuccess();
+                            window.dispatchEvent(new CustomEvent('earnings-update'));
+                        }).catch(err => {
+                            console.error('[TIMELOG] Stop failed:', err?.message);
+                            markApiFailure();
+                        });
+                    }).catch(() => {});
+                }
 
                 // Stop ALL subtask timers for this task
                 const timersForTask = Object.values(get().activeTimers).filter(t => t.taskId === taskId);
@@ -827,8 +1095,15 @@ export const useAppStore = create<AppState>()(
                 const timerKeys = Object.keys(activeTimers);
                 const trackerKeys = Object.keys(taskTrackers);
 
+                // Midnight warning — warn 10 min before auto-stop
+                const nowDate = new Date();
+                const minutesToMidnight = (24 * 60) - (nowDate.getHours() * 60 + nowDate.getMinutes());
+                if (minutesToMidnight === 10 && nowDate.getSeconds() === 0 && (timerKeys.length > 0 || trackerKeys.length > 0)) {
+                    get().addToast('warning', '\u09E7\u09E6 \u09AE\u09BF\u09A8\u09BF\u099F\u09C7 \u09A8\u09A4\u09C1\u09A8 \u09A6\u09BF\u09A8 \u09B6\u09C1\u09B0\u09C1 \u09B9\u09AC\u09C7 \u2014 \u099F\u09BE\u0987\u09AE\u09BE\u09B0 \u09B8\u09CD\u09AC\u09AF\u09BC\u0982\u0995\u09CD\u09B0\u09BF\u09AF\u09BC\u09AD\u09BE\u09AC\u09C7 \u09AC\u09A8\u09CD\u09A7 \u09B9\u09AC\u09C7', 15000);
+                }
+
                 // Midnight detection — if the date has changed, auto-stop all timers for new day
-                const today = new Date().toISOString().slice(0, 10);
+                const today = nowDate.toISOString().slice(0, 10);
                 if (get().lastTickDate !== today) {
                     console.log('[TICK] Date changed — auto-stopping all timers for new day');
                     set({ lastTickDate: today });
@@ -884,6 +1159,24 @@ export const useAppStore = create<AppState>()(
                                 const activeForTask = Object.values(activeTimers).filter(t => t.taskId === taskId && !t.isPaused);
                                 if (activeForTask.length > 0) {
                                     tasksToScreenshot.push({ tracker, activeTimersList: activeForTask });
+                                } else {
+                                    // TaskTracker running but no ActiveTimer → still capture screenshot
+                                    // (common for single-subtask hourly tasks where subtask is COMPLETED)
+                                    console.log(`[TICK] 📸 Screenshot via TaskTracker-only (no ActiveTimer) for task=${taskId.slice(0,8)}`);
+                                    tasksToScreenshot.push({
+                                        tracker,
+                                        activeTimersList: [{
+                                            subTaskId: '',
+                                            taskId: taskId,
+                                            taskTitle: '',
+                                            subTaskTitle: '',
+                                            startedAt: tracker.wallClockStartedAt,
+                                            accumulatedSeconds: 0,
+                                            elapsedSeconds: tracker.wallClockElapsed,
+                                            isPaused: false,
+                                            screenshotEnabled: true,
+                                        } as any]
+                                    });
                                 }
                             }
                         } else if (newWall % 60 === 0) {
@@ -1010,10 +1303,9 @@ export const useAppStore = create<AppState>()(
                     shouldQueueOffline = true;
                 }
 
-                if (!shouldQueueOffline && !isApiHealthy() && navigator.onLine) {
-                    console.warn('⏸️ API unhealthy — screenshots will be saved locally');
-                    shouldQueueOffline = true;
-                }
+                // NOTE: Removed isApiHealthy() gate — screenshots should try direct upload
+                // when online. If upload fails, it will be caught and queued in the catch block.
+                // This prevents screenshots from being stuck offline when API health probe lags.
 
                 screenshotInProgress = true;
 
@@ -1026,11 +1318,17 @@ export const useAppStore = create<AppState>()(
                             let rawBase64: string | null = null;
                             try {
                                 rawBase64 = await window.electron.captureScreenshot();
-                            } catch (captureErr) {
-                                console.error('Screenshot capture failed:', captureErr);
+                            } catch (captureErr: any) {
+                                console.error('[SCREENSHOT] Capture failed:', captureErr?.message || captureErr);
+                                if (taskTracker.monitoringMode === 'TRANSPARENT') {
+                                    get().addToast('warning', 'স্ক্রিনশট ক্যাপচার ব্যর্থ');
+                                }
                                 continue;
                             }
-                            if (!rawBase64) continue;
+                            if (!rawBase64) {
+                                console.warn('[SCREENSHOT] captureScreenshot returned null — no screen sources?');
+                                continue;
+                            }
 
                             // Direct Base64 → Blob (no intermediate data URI fetch)
                             const binaryStr = atob(rawBase64);
@@ -1100,6 +1398,8 @@ export const useAppStore = create<AppState>()(
                                 formData.append('keystrokes', String(activityStats.keystrokes || 0));
                                 formData.append('mouseClicks', String(activityStats.mouseClicks || 0));
                                 formData.append('capturedAt', capturedAt);
+                                const intervalSecs = (taskTracker.screenshotInterval || settings.screenshotInterval || 10) * 60;
+                                formData.append('activeSeconds', String(intervalSecs));
                                 // Hardware fingerprint — detect multi-device usage
                                 const deviceId = await window.electron.getDeviceId?.().catch(() => null);
                                 if (deviceId) formData.append('deviceId', deviceId);
